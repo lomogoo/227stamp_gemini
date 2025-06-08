@@ -5,13 +5,70 @@ const db = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
 );
 
-/* 2) グローバル変数 */
+/* 2) グローバル変数 & データ */
 let globalUID = null;
 let html5QrCode = null;
 
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
 };
+
+const articles = [
+    { 
+      id: 0,
+      scraping_url:'https://machico.mu/special/detail/2691',
+      article_url: 'https://machico.mu/special/detail/2691',
+      category:'イベント',
+      title:'🏮仙臺横丁フェス 2025',
+      summary:'昭和の賑わいを公園で再現！赤ちょうちん、昭和歌謡、屋台グルメが並ぶ雰囲気満点のフェス。',
+      summary_points: [
+          '**開催日時**: 2025年6月13日(金)〜15日(日)',
+          '**場所**: 勾当台公園 市民広場＆いこいのゾーン',
+          '**特徴**: 入場無料で、専用グラス(500円)片手に横丁の世界を体感！',
+          '**特典**: machicoユーザー限定で500円食券が当たるチャンスも！'
+      ]
+    },
+    { 
+      id: 1,
+      scraping_url:'https://machico.mu/special/detail/2704',
+      article_url: 'https://machico.mu/special/detail/2704',
+      category:'イベント',
+      title:'Sendai Coffee Fes 2025 Summer',
+      summary:'コーヒー好き必見！夏の週末を彩るコーヒーの祭典。お気に入りの一杯を見つけよう。',
+      summary_points: [
+          '**開催日時**: 2025年6月29日(土)・30日(日)',
+          '**場所**: 錦町公園',
+          '**内容**: 宮城県内外の人気コーヒーショップが集結！',
+          '**楽しみ方**: チケットで様々なコーヒーを飲み比べ。フードや雑貨も充実。'
+      ]
+    },
+    { 
+      id: 2,
+      scraping_url:'https://machico.mu/jump/ad/102236',
+      article_url: 'https://www.sendai-jinjacho.jp/',
+      category:'ニュース', 
+      title:'宮城県神社庁からのお知らせ',
+      summary:'季節の祭事や神社の豆知識など、私たちの暮らしに身近な情報をお届けします。',
+      summary_points: [
+          '**夏越の大祓**: 半年の穢れを祓い、無病息災を祈る神事のご案内。',
+          '**七五三詣**: お子様の健やかな成長を願う七五三の準備について。',
+          '**神社の作法**: 知っているようで知らない？参拝の基本を解説。',
+      ]
+    },
+    { 
+      id: 3,
+      scraping_url:'https://machico.mu/special/detail/2926',
+      article_url: 'https://machico.mu/special/detail/2926',
+      category:'ニュース', 
+      title:'仙台の新しい魅力を発見！',
+      summary:'注目の新店舗から、地元で愛される隠れた名店まで。次の週末のお出かけ先にいかが？',
+      summary_points: [
+          '**ニューオープン**: 話題のカフェやレストランの最新情報。',
+          '**再発見**: 地元ライターがおすすめする、通なスポットを紹介。',
+          '**テイクアウト**: お家で楽しめる絶品グルメ特集。'
+      ]
+    }
+  ];
 
 /* 3) メイン処理 */
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,12 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       globalUID = session?.user?.id || null;
       updateUserStatus(session);
-
       const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
       await showSection(activeSectionId, true);
     } catch (error) {
       console.error("onAuthStateChangeで致命的なエラーが発生しました:", error);
-      showNotification("重大なエラー", "アプリの初期化に失敗しました。ページをリロードしてください。");
+      showNotification("重大なエラー", "アプリの初期化に失敗しました。");
     } finally {
       appLoader.classList.remove('active');
     }
@@ -40,8 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupStaticEventListeners() {
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
-      const sectionId = e.currentTarget.dataset.section;
-      showSection(sectionId);
+      showSection(e.currentTarget.dataset.section);
     });
   });
 
@@ -52,24 +107,14 @@ function setupStaticEventListeners() {
       const emailInput = document.getElementById('email');
       const msgEl = document.getElementById('login-message');
       const submitButton = loginForm.querySelector('button[type="submit"]');
-      
       submitButton.disabled = true;
       submitButton.textContent = '送信中...';
       msgEl.textContent = '';
-
       try {
         const redirectURL = window.location.origin + window.location.pathname;
-        const { error } = await db.auth.signInWithOtp({ 
-          email: emailInput.value.trim(), 
-          options: { emailRedirectTo: redirectURL }
-        });
-
-        if (error) {
-          msgEl.textContent = `❌ ${error.message}`;
-        } else {
-          msgEl.textContent = '✅ メールを確認してください！';
-          emailInput.value = '';
-        }
+        const { error } = await db.auth.signInWithOtp({ email: emailInput.value.trim(), options: { emailRedirectTo: redirectURL } });
+        msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
+        if (!error) emailInput.value = '';
       } catch (err) {
         msgEl.textContent = `❌ 予期せぬエラーが発生しました。`;
       } finally {
@@ -92,11 +137,8 @@ async function showSection(sectionId, isInitialLoad = false) {
   const sectionElement = document.getElementById(sectionId);
   if (sectionElement) {
     sectionElement.classList.add('active');
-    if (sectionId === 'feed-section') {
-      await initializeFeedPage();
-    } else if (sectionId === 'foodtruck-section') {
-      await initializeFoodtruckPage();
-    }
+    if (sectionId === 'feed-section') await initializeFeedPage();
+    else if (sectionId === 'foodtruck-section') await initializeFoodtruckPage();
   }
   if (!isInitialLoad) appLoader.classList.remove('active');
 }
@@ -104,12 +146,8 @@ async function showSection(sectionId, isInitialLoad = false) {
 function updateUserStatus(session) {
   const userStatusDiv = document.getElementById('user-status');
   if (userStatusDiv) {
-    if (session) {
-      userStatusDiv.innerHTML = '<button id="logout-button" class="btn">ログアウト</button>';
-      document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
-    } else {
-      userStatusDiv.innerHTML = '';
-    }
+    userStatusDiv.innerHTML = session ? '<button id="logout-button" class="btn">ログアウト</button>' : '';
+    if (session) document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
   }
 }
 
@@ -178,17 +216,17 @@ function closeModal(modalElement) {
     }
 }
 
-
 /* 6) ヘルパー関数群 */
-
-// ★★★ データベースがユーザー作成を担うため、非常にシンプルになった ★★★
 async function fetchUserRow(uid) {
   try {
-    const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
+    const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
     if (error) throw error;
-    return data.stamp_count;
+    if (data) return data.stamp_count;
+    const { error: insertError } = await db.from('users').insert({ supabase_uid: uid, stamp_count: 0 });
+    if (insertError) throw insertError;
+    return 0;
   } catch (err) {
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。少し待ってからページをリロードしてみてください。');
+    showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
 }
@@ -266,9 +304,7 @@ function initQRScanner() {
     async (decodedText) => {
       if (isProcessing) return;
       isProcessing = true;
-      if (html5QrCode.isScanning) {
-          await html5QrCode.stop();
-      }
+      if (html5QrCode.isScanning) await html5QrCode.stop();
       closeModal(qrModal);
       if (decodedText === appData.qrString) {
         await addStamp();
@@ -276,7 +312,7 @@ function initQRScanner() {
         showNotification('無効なQR', 'お店のQRコードではありません。');
       }
     },
-    (errorMessage) => { /* ignore */ }
+    (errorMessage) => {}
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
@@ -284,17 +320,13 @@ async function renderArticles(category) {
   const articlesContainer = document.getElementById('articles-container');
   if (!articlesContainer) return;
   articlesContainer.innerHTML = '<div class="loading-spinner"></div>';
-  const list = [
-    { url:'https://machico.mu/special/detail/2691',category:'イベント',title:'Machico 2691',summary:'イベント記事' },
-    { url:'https://machico.mu/special/detail/2704',category:'イベント',title:'Machico 2704',summary:'イベント記事' },
-    { url:'https://machico.mu/jump/ad/102236',      category:'ニュース', title:'Machico 102236',summary:'ニュース記事' },
-    { url:'https://machico.mu/special/detail/2926', category:'ニュース', title:'Machico 2926',summary:'ニュース記事' }
-  ];
-  const targets = list.filter(a => category === 'all' || a.category === category);
+  
+  const targets = articles.filter(a => category === 'all' || a.category === category);
+  
   try {
     const cards = await Promise.all(targets.map(async a => {
       try {
-        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(a.url)}`);
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(a.scraping_url)}`);
         if (!res.ok) return { ...a, img: 'assets/placeholder.jpg' };
         const d = await res.json();
         const doc = new DOMParser().parseFromString(d.contents, 'text/html');
@@ -303,14 +335,49 @@ async function renderArticles(category) {
         return { ...a, img: 'assets/placeholder.jpg' };
       }
     }));
+
     articlesContainer.innerHTML = '';
-    cards.forEach(a => {
+    cards.forEach(cardData => {
       const div = document.createElement('div');
       div.className = 'card';
-      div.innerHTML = `<a href="${a.url}" target="_blank" rel="noopener noreferrer"><img src="${a.img}" alt="${a.title}のサムネイル" loading="lazy"><div class="card-body"><h3 class="article-title">${a.title}</h3><p class="article-excerpt">${a.summary}</p></div></a>`;
+      div.innerHTML = `
+        <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
+          <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy">
+          <div class="card-body">
+            <h3 class="article-title">${cardData.title}</h3>
+            <p class="article-excerpt">${cardData.summary}</p>
+          </div>
+        </div>`;
       articlesContainer.appendChild(div);
+    });
+
+    document.querySelectorAll('.article-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const articleId = e.currentTarget.dataset.articleId;
+        showSummaryModal(parseInt(articleId, 10));
+      });
     });
   } catch (error) {
     articlesContainer.innerHTML = '<div class="status status--error">記事の読み込みに失敗しました。</div>';
   }
+}
+
+function showSummaryModal(articleId) {
+    const article = articles.find(a => a.id === articleId);
+    if (!article) return;
+
+    const modal = document.getElementById('summary-modal');
+    const imgEl = document.getElementById('summary-image');
+    const titleEl = document.getElementById('summary-title');
+    const bulletsEl = document.getElementById('summary-bullets');
+    const readMoreBtn = document.getElementById('summary-read-more');
+
+    const cardImage = document.querySelector(`[data-article-id="${articleId}"] img`);
+    imgEl.style.backgroundImage = cardImage ? `url('${cardImage.src}')` : 'none';
+    
+    titleEl.textContent = article.title;
+    bulletsEl.innerHTML = article.summary_points.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('');
+    readMoreBtn.href = article.article_url;
+
+    modal.classList.add('active');
 }
