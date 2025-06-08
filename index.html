@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>⛰️Route227🚚</title>
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="app-loader" class="app-loader active">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <div id="app-root">
+    <header class="app-header">
+      <div class="container header-container">
+        <h1 class="app-title">⛰️Route227🚚</h1>
+        <div id="user-status"></div>
+      </div>
+    </header>
+
+    <main id="content-container" class="app-content"></main>
+
+    <nav class="footer-nav">
+      <div class="container">
+        <ul class="nav-tabs">
+          <li class="nav-item">
+            <a href="/" class="nav-link active" data-path="feed">
+              <span>⛰️</span>
+              227
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="/foodtruck" class="nav-link" data-path="foodtruck">
+              <span>🚚</span>
+              FoodTruck
+            </a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
