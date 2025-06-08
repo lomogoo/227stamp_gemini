@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error("onAuthStateChangeで致命的なエラーが発生しました:", error);
       showNotification("重大なエラー", "アプリの初期化に失敗しました。ページをリロードしてください。");
     } finally {
-      // ★★★ 成功・失敗にかかわらず、必ずローダーを非表示にする
       appLoader.classList.remove('active');
     }
   });
@@ -140,7 +139,7 @@ async function initializeFoodtruckPage() {
     return;
   }
   try {
-    const stampCount = await fetchOrCreateUserRow(globalUID);
+    const stampCount = await fetchUserRow(globalUID);
     updateStampDisplay(stampCount);
     updateRewardButtons(stampCount);
     setupFoodtruckActionListeners();
@@ -179,30 +178,17 @@ function closeModal(modalElement) {
     }
 }
 
+
 /* 6) ヘルパー関数群 */
 
-// ★★★ 最も重要な修正箇所 ★★★
-async function fetchOrCreateUserRow(uid) {
+// ★★★ データベースがユーザー作成を担うため、非常にシンプルになった ★★★
+async function fetchUserRow(uid) {
   try {
-    // 1. まずユーザー情報を探しに行く
-    const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
-    if (error) throw error; // 予期せぬDBエラーは処理を中断
-
-    // 2. ユーザーが存在すれば、そのスタンプ数を返す
-    if (data) {
-      return data.stamp_count;
-    }
-
-    // 3. ユーザーが存在しなければ、新規作成「だけ」を行う
-    const { error: insertError } = await db.from('users').insert({ supabase_uid: uid, stamp_count: 0 });
-    if (insertError) throw insertError; // INSERT時のエラーは処理を中断
-    
-    // 4. 新規作成に成功した場合、スタンプ数は必ず0なので0を返す
-    return 0;
-
+    const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
+    if (error) throw error;
+    return data.stamp_count;
   } catch (err) {
-    // この関数内でエラーが発生した場合、アプリが停止しないように通知を出し、上位の処理にエラーを伝える
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
+    showNotification('エラー', 'ユーザー情報の取得に失敗しました。少し待ってからページをリロードしてみてください。');
     throw err;
   }
 }
@@ -236,17 +222,15 @@ function updateRewardButtons(count) {
 
 function showNotification(title, msg) {
   const modal = document.getElementById('notification-modal');
-  const titleEl = document.getElementById('notification-title');
-  const msgEl = document.getElementById('notification-message');
-  if(titleEl) titleEl.textContent = title;
-  if(msgEl) msgEl.textContent = msg;
+  document.getElementById('notification-title').textContent = title;
+  document.getElementById('notification-message').textContent = msg;
   modal?.classList.add('active');
 }
 
 async function addStamp() {
   if (!globalUID) return;
   try {
-    let count = await fetchOrCreateUserRow(globalUID);
+    let count = await fetchUserRow(globalUID);
     if (count >= 6) return showNotification('コンプリート！', 'スタンプが6個たまりました！');
     count = await updateStampCount(globalUID, count + 1);
     updateStampDisplay(count);
@@ -261,7 +245,7 @@ async function addStamp() {
 async function redeemReward(type) {
   if (!globalUID) return;
   try {
-    let count = await fetchOrCreateUserRow(globalUID);
+    let count = await fetchUserRow(globalUID);
     const required = type === 'coffee' ? 3 : 6;
     if (count < required) return;
     count = await updateStampCount(globalUID, count - required);
