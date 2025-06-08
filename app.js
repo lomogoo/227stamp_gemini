@@ -21,13 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const appLoader = document.getElementById('app-loader');
     appLoader.classList.add('active');
     
-    globalUID = session?.user?.id || null;
-    updateUserStatus(session);
+    // ★★★ onAuthStateChange全体の処理をtry...catchで囲む ★★★
+    try {
+      globalUID = session?.user?.id || null;
+      updateUserStatus(session);
 
-    const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
-    await showSection(activeSectionId, true);
-    
-    appLoader.classList.remove('active');
+      const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
+      await showSection(activeSectionId, true);
+    } catch (error) {
+      console.error("onAuthStateChangeで致命的なエラー:", error);
+      showNotification("重大なエラー", "アプリの初期化に失敗しました。ページをリロードしてください。");
+    } finally {
+      appLoader.classList.remove('active');
+    }
   });
 });
 
@@ -40,14 +46,24 @@ function setupStaticEventListeners() {
     });
   });
 
-  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const emailInput = document.getElementById('email');
-    const msgEl = document.getElementById('login-message');
-    msgEl.textContent = '送信中...';
-    const { error } = await db.auth.signInWithOtp({ email: emailInput.value.trim(), options: { emailRedirectTo: window.location.href }});
-    msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
-  });
+  const loginForm = document.getElementById('login-form');
+  if(loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const emailInput = document.getElementById('email');
+      const msgEl = document.getElementById('login-message');
+      msgEl.textContent = '送信中...';
+      
+      // ★★★ リダイレクトURLをより安全なものに修正 ★★★
+      const redirectURL = window.location.origin + window.location.pathname;
+      const { error } = await db.auth.signInWithOtp({ 
+        email: emailInput.value.trim(), 
+        options: { emailRedirectTo: redirectURL }
+      });
+
+      msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
+    });
+  }
 }
 
 async function showSection(sectionId, isInitialLoad = false) {
@@ -86,20 +102,27 @@ function updateUserStatus(session) {
 /* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
   await renderArticles('all');
-  document.querySelectorAll('.category-tab').forEach(tab => {
-    tab.addEventListener('click', (e) => {
-      document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
-      e.currentTarget.classList.add('active');
-      document.getElementById('articles-container').innerHTML = '<div class="loading-spinner"></div>';
-      renderArticles(e.currentTarget.dataset.category);
+  // イベントリスナーは一度だけ設定すれば良いように修正
+  const categoryTabs = document.getElementById('category-tabs');
+  if (!categoryTabs.dataset.listenerAttached) {
+    categoryTabs.dataset.listenerAttached = 'true';
+    categoryTabs.addEventListener('click', (e) => {
+      if (e.target.classList.contains('category-tab')) {
+        document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+        e.target.classList.add('active');
+        document.getElementById('articles-container').innerHTML = '<div class="loading-spinner"></div>';
+        renderArticles(e.target.dataset.category);
+      }
     });
-  });
+  }
 }
 
 async function initializeFoodtruckPage() {
   setupModalEventListeners();
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
+    updateStampDisplay(0); // ログアウト時は0を表示
+    updateRewardButtons(0);
     return;
   }
   try {
@@ -109,6 +132,8 @@ async function initializeFoodtruckPage() {
     setupFoodtruckActionListeners();
   } catch(error) {
     // fetchOrCreateUserRow内で通知される
+    updateStampDisplay(0);
+    updateRewardButtons(0);
   }
 }
 
@@ -120,8 +145,16 @@ function setupFoodtruckActionListeners() {
 
 function setupModalEventListeners() {
   document.querySelectorAll('.modal').forEach(modal => {
-    modal.querySelector('.close-modal')?.addEventListener('click', () => closeModal(modal));
-    modal.querySelector('.close-notification')?.addEventListener('click', () => closeModal(document.getElementById('notification-modal')));
+    const closeBtn = modal.querySelector('.close-modal');
+    if (closeBtn && !closeBtn.dataset.listenerAttached) {
+      closeBtn.dataset.listenerAttached = 'true';
+      closeBtn.addEventListener('click', () => closeModal(modal));
+    }
+    const closeNotifBtn = modal.querySelector('.close-notification');
+     if (closeNotifBtn && !closeNotifBtn.dataset.listenerAttached) {
+      closeNotifBtn.dataset.listenerAttached = 'true';
+      closeNotifBtn.addEventListener('click', () => closeModal(document.getElementById('notification-modal')));
+    }
   });
 }
 
