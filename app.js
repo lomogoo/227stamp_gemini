@@ -11,7 +11,7 @@ let html5QrCode = null;
 let articlesCache = [];
 
 // 「さらに読み込む」機能用の変数
-const ARTICLES_PER_PAGE = 10; // 1回に読み込む記事の数
+const ARTICLES_PER_PAGE = 10;
 let currentPage = 0;
 let currentCategory = 'all';
 let isLoadingMore = false;
@@ -45,18 +45,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
+  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       showSection(e.currentTarget.dataset.section);
     });
   });
   
+  // 「さらに読み込む」ボタンのイベントリスナー
   document.getElementById('load-more-btn')?.addEventListener('click', () => {
     if (isLoadingMore) return;
     currentPage++;
     renderArticles(currentCategory, false);
   });
 
+  // ログインフォームに対するイベントリスナー
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -81,12 +84,19 @@ function setupStaticEventListeners() {
     });
   }
 
+  // モーダルを閉じる処理をここに集約
   document.body.addEventListener('click', (e) => {
+    // 閉じるボタン（xボタンやOKボタン）がクリックされた場合
     if (e.target.matches('.close-modal') || e.target.matches('.close-notification')) {
       const modal = e.target.closest('.modal');
       if (modal) {
         closeModal(modal);
       }
+    }
+    
+    // モーダルの外側（グレーの背景部分）がクリックされた場合
+    if (e.target.matches('.modal')) {
+      closeModal(e.target);
     }
   });
 }
@@ -140,7 +150,6 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
-  setupModalEventListeners();
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -162,10 +171,6 @@ function setupFoodtruckActionListeners() {
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
-}
-
-function setupModalEventListeners() {
-  // グローバルな閉じるボタンのリスナーに集約されたため、この関数は空でOK
 }
 
 function closeModal(modalElement) {
