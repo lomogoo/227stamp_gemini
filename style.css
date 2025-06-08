@@ -463,3 +463,59 @@ input[type="email"] {
   width: auto;  /* 横幅は縦横比を維持して自動調整 */
   vertical-align: middle; /* 隣のテキストとの縦位置を微調整 */
 }
+
+/* === ここからコピー === */
+
+/**
+ * デザイン改修で気に入った部分を適用するカスタムスタイル
+ * 元のstyle.cssの一番下に追加してください
+ */
+
+/* 1. 全体の背景色とヘッダーの背景色を更新 */
+
+/* :rootから新しい色定義を拝借（しなくても動きますが、後で調整しやすいように） */
+:root {
+  --color-new-bg: #F2CC8F;
+  --color-new-gradient-start: #F4F1DE;
+  --color-new-gradient-end: #E07A5F;
+  --color-new-tab-active: #81B29A;
+}
+
+body {
+  /* 新しい暖かい背景色 */
+  background-color: var(--color-new-bg);
+  /* 淡いグラデーションとテクスチャを追加して深みを出す */
+  background-image: linear-gradient(170deg, var(--color-new-gradient-start) 0%, var(--color-new-gradient-end) 200%), url('https://www.transparenttextures.com/patterns/subtle-zebra-3d.png');
+}
+
+#app-root {
+  /* 全体の背景が見えるように、メインコンテンツの背景を透明に */
+  background-color: transparent;
+  box-shadow: none; /* 背景が一体化するので影は不要に */
+}
+
+.app-header {
+  /* ヘッダーも透明にして、背景との一体感を出す */
+  background: transparent;
+  /* ヘッダー内のテキストやアイコンが見やすいように、少しだけ影をつける */
+  text-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* 2. 上部タブの色使いを更新 */
+.category-tab {
+  /* 半透明の背景で軽やかな印象に */
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(2px); /* すりガラス効果（お好みで） */
+  color: var(--color-text);
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.5); /* 輪郭を少しだけはっきりと */
+}
+
+.category-tab.active {
+  /* 新しいテーマのセカンダリカラー（落ち着いた緑）をアクティブ色に */
+  background: var(--color-new-tab-active);
+  color: white;
+  font-weight: 700;
+}
+
+/* === ここまでコピー === */
