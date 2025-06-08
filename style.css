@@ -116,7 +116,7 @@ body {
   height: 100%;
   flex-grow: 1;
   text-decoration: none;
-  color: var(--color-text-secondary);
+  color: #6c757d;
   font-size: 10px;
   gap: 2px;
   transition: all 0.2s ease;
@@ -138,7 +138,11 @@ body {
 
 /* 5. Sections & Content */
 .section { display: none; padding: 20px 16px; }
-.section.active { display: block; }
+.section.active { display: block; animation: fadeIn 0.5s ease; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .card {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
@@ -206,6 +210,14 @@ input[type="email"] {
   transition: all 0.2s ease;
 }
 .category-tab.active { background: var(--color-accent); color: var(--color-text); font-weight: 700; }
+.article-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    cursor: pointer;
+}
 .articles-container .card {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -316,3 +328,69 @@ input[type="email"] {
 .modal-body p { font-size: 14px; margin-bottom: 16px; }
 #login-message { margin-top: 12px; text-align: center; font-size: 12px; height: 1em; }
 #qr-reader { border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
+
+/* 10. Summary Modal */
+.summary-modal-content {
+  padding: 0;
+  overflow: hidden;
+}
+.summary-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background-color: rgba(0,0,0,0.5);
+  color: white;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  z-index: 10;
+  border: none;
+}
+.summary-image {
+  width: 100%;
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--color-border);
+}
+.summary-text-content {
+  padding: 24px;
+}
+#summary-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+#summary-bullets {
+  list-style-type: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+}
+#summary-bullets li {
+  font-size: 15px;
+  line-height: 1.7;
+  padding-left: 20px;
+  position: relative;
+}
+#summary-bullets li:not(:last-child) {
+  margin-bottom: 12px;
+}
+#summary-bullets li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--color-primary);
+  font-weight: bold;
+}
+#summary-read-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
