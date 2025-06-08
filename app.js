@@ -13,7 +13,7 @@ const ARTICLES_PER_PAGE = 10;
 let currentPage = 0;
 let currentCategory = 'all';
 let isLoadingMore = false;
-let isInitialAuthCheckDone = false; // 【変更点】初回初期化が完了したかを管理するフラグ
+let isInitialAuthCheckDone = false;
 
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
@@ -23,9 +23,8 @@ const appData = {
 document.addEventListener('DOMContentLoaded', () => {
   setupStaticEventListeners();
 
-  // 【変更点】認証状態の変更を監視するロジックを全面的に刷新
   db.auth.onAuthStateChange(async (event, session) => {
-    console.log('onAuthStateChange event:', event); // デバッグ用にイベントをログ出力
+    console.log('onAuthStateChange event:', event);
 
     globalUID = session?.user?.id || null;
     updateUserStatus(session);
@@ -37,22 +36,45 @@ document.addEventListener('DOMContentLoaded', () => {
       appLoader.classList.add('active');
       
       try {
-        // 最後に開いていたセクションを復元、なければフィードへ
         const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
         await showSection(lastSection, true);
       } catch (error) {
         console.error("初回読み込みエラー:", error);
-        await showSection('feed-section', true); // エラー時はフィードにフォールバック
+        await showSection('feed-section', true);
       } finally {
         appLoader.classList.remove('active');
       }
     }
 
-    // ログアウトした時の処理
+    // ログイン成功時の処理
+    if (event === 'SIGNED_IN' && isInitialAuthCheckDone) {
+      const appLoader = document.getElementById('app-loader');
+      appLoader.classList.add('active');
+      try {
+          const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
+          await showSection(currentActiveSectionId, true);
+      } catch (error) {
+          console.error("サインイン後の画面更新エラー:", error);
+      } finally {
+          setTimeout(() => appLoader.classList.remove('active'), 100);
+      }
+    }
+
+    // 【修正点】ログアウト時の処理を修正
     if (event === 'SIGNED_OUT') {
-      sessionStorage.removeItem('activeSection');
-      // ユーザー情報をクリアしてフィード画面を表示
-      await showSection('feed-section', true);
+        const appLoader = document.getElementById('app-loader');
+        appLoader.classList.add('active'); // ログアウト処理中にローダーを表示
+
+        try {
+            sessionStorage.removeItem('activeSection');
+            // ユーザー情報をクリアしてフィード画面を表示
+            await showSection('feed-section', true);
+        } catch(error) {
+            console.error("ログアウト処理中のエラー:", error);
+        } finally {
+            // 処理が成功しても失敗しても、必ずローダーを非表示にする
+            appLoader.classList.remove('active');
+        }
     }
   });
 });
@@ -62,23 +84,19 @@ function setupStaticEventListeners() {
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       const sectionId = e.currentTarget.dataset.section;
-      // 【変更点】クリックしたセクションを記憶
       sessionStorage.setItem('activeSection', sectionId);
       showSection(sectionId);
     });
   });
 
-  // 「さらに読み込む」ボタンのイベントリスナー（変更なし）
   document.getElementById('load-more-btn')?.addEventListener('click', () => {
     if (isLoadingMore) return;
     currentPage++;
     renderArticles(currentCategory, false);
   });
 
-  // 2段階認証のロジック（変更なし）
+  // 2段階認証のロジック
   const emailForm = document.getElementById('email-form');
-  // ... (以降の認証フォーム関連のコードは変更なし)
-  // ...
   const otpForm = document.getElementById('otp-form');
   const emailInput = document.getElementById('email');
   const otpCodeInput = document.getElementById('otp-code');
@@ -141,9 +159,7 @@ function setupStaticEventListeners() {
   });
 }
 
-// 【変更点】showSection内のローディング表示ロジックを簡素化
 async function showSection(sectionId, isInitialLoad = false) {
-  // isInitialLoad=false の時だけ（つまりユーザーのクリック時だけ）ローダーを出す
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
 
@@ -155,13 +171,11 @@ async function showSection(sectionId, isInitialLoad = false) {
   const sectionElement = document.getElementById(sectionId);
   if (sectionElement) {
     sectionElement.classList.add('active');
-    // ページごとの初期化処理は変わらず実行
     if (sectionId === 'feed-section') await initializeFeedPage();
     else if (sectionId === 'foodtruck-section') await initializeFoodtruckPage();
   }
   
   if (!isInitialLoad) {
-      // ユーザーのクリック時のローダーは、処理が終わったらすぐに消す
       setTimeout(() => appLoader.classList.remove('active'), 100);
   }
 }
@@ -174,7 +188,7 @@ function updateUserStatus(session) {
     }
 }
 
-/* 5) ページ別初期化ロジック (変更なし) */
+/* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
   const categoryTabs = document.getElementById('category-tabs');
   if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
@@ -191,7 +205,6 @@ async function initializeFeedPage() {
   }
   
   currentPage = 0;
-  // カテゴリは最後に選択したものを維持する（ここでは'all'で初期化）
   currentCategory = 'all';
   document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
   await renderArticles(currentCategory, true);
@@ -215,13 +228,7 @@ async function initializeFoodtruckPage() {
   }
 }
 
-
-// これ以降の関数は変更ありません
-// ... setupFoodtruckActionListeners, closeModal, fetchUserRow, ...
-// ... updateStampCount, updateStampDisplay, updateRewardButtons, ...
-// ... showNotification, addStamp, redeemReward, initQRScanner, ...
-// ... renderArticles, showSummaryModal, promiseWithTimeout ...
-
+/* 6) ヘルパー関数群 */
 function setupFoodtruckActionListeners() {
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
