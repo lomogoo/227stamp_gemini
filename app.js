@@ -60,21 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 【修正点】ログアウト時の処理を修正
+    // ログアウト時はページをリロードして状態をリセットするのが最も確実
     if (event === 'SIGNED_OUT') {
-        const appLoader = document.getElementById('app-loader');
-        appLoader.classList.add('active'); // ログアウト処理中にローダーを表示
-
-        try {
-            sessionStorage.removeItem('activeSection');
-            // ユーザー情報をクリアしてフィード画面を表示
-            await showSection('feed-section', true);
-        } catch(error) {
-            console.error("ログアウト処理中のエラー:", error);
-        } finally {
-            // 処理が成功しても失敗しても、必ずローダーを非表示にする
-            appLoader.classList.remove('active');
-        }
+        sessionStorage.removeItem('activeSection');
+        window.location.reload();
     }
   });
 });
