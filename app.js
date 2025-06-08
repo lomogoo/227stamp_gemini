@@ -28,9 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
       await showSection(activeSectionId, true);
     } catch (error) {
-      console.error("onAuthStateChangeで致命的なエラー:", error);
+      console.error("onAuthStateChangeで致命的なエラーが発生しました:", error);
       showNotification("重大なエラー", "アプリの初期化に失敗しました。ページをリロードしてください。");
     } finally {
+      // ★★★ 成功・失敗にかかわらず、必ずローダーを非表示にする
       appLoader.classList.remove('active');
     }
   });
@@ -38,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
-  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       const sectionId = e.currentTarget.dataset.section;
@@ -46,20 +46,17 @@ function setupStaticEventListeners() {
     });
   });
 
-  // ログインフォームに対するイベントリスナー
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
       const emailInput = document.getElementById('email');
       const msgEl = document.getElementById('login-message');
       const submitButton = loginForm.querySelector('button[type="submit"]');
-
-      // ボタンを無効化して、テキストを変更
+      
       submitButton.disabled = true;
       submitButton.textContent = '送信中...';
-      msgEl.textContent = ''; // 前回のメッセージをクリア
+      msgEl.textContent = '';
 
       try {
         const redirectURL = window.location.origin + window.location.pathname;
@@ -72,13 +69,11 @@ function setupStaticEventListeners() {
           msgEl.textContent = `❌ ${error.message}`;
         } else {
           msgEl.textContent = '✅ メールを確認してください！';
-          emailInput.value = ''; // 成功したら入力欄をクリア
+          emailInput.value = '';
         }
       } catch (err) {
         msgEl.textContent = `❌ 予期せぬエラーが発生しました。`;
-        console.error("Sign in error:", err);
       } finally {
-        // 処理が完了したら（成功・失敗問わず）、ボタンを元に戻す
         submitButton.disabled = false;
         submitButton.textContent = 'Magic Link を送信';
       }
@@ -88,7 +83,7 @@ function setupStaticEventListeners() {
 
 async function showSection(sectionId, isInitialLoad = false) {
   const appLoader = document.getElementById('app-loader');
-  if(!isInitialLoad) appLoader.classList.add('active');
+  if (!isInitialLoad) appLoader.classList.add('active');
 
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(l => {
@@ -104,7 +99,7 @@ async function showSection(sectionId, isInitialLoad = false) {
       await initializeFoodtruckPage();
     }
   }
-  if(!isInitialLoad) appLoader.classList.remove('active');
+  if (!isInitialLoad) appLoader.classList.remove('active');
 }
 
 function updateUserStatus(session) {
@@ -156,7 +151,7 @@ async function initializeFoodtruckPage() {
 }
 
 function setupFoodtruckActionListeners() {
-    document.getElementById('scan-qr')?.addEventListener('click', () => initQRScanner());
+    document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
 }
@@ -184,26 +179,43 @@ function closeModal(modalElement) {
     }
 }
 
-
 /* 6) ヘルパー関数群 */
+
+// ★★★ 最も重要な修正箇所 ★★★
 async function fetchOrCreateUserRow(uid) {
   try {
+    // 1. まずユーザー情報を探しに行く
     const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
-    if (error) throw error;
-    if (data) return data.stamp_count;
-    const { data: inserted, error: iErr } = await db.from('users').insert([{ supabase_uid: uid, stamp_count: 0 }]).select().single();
-    if (iErr) throw iErr;
-    return inserted.stamp_count;
+    if (error) throw error; // 予期せぬDBエラーは処理を中断
+
+    // 2. ユーザーが存在すれば、そのスタンプ数を返す
+    if (data) {
+      return data.stamp_count;
+    }
+
+    // 3. ユーザーが存在しなければ、新規作成「だけ」を行う
+    const { error: insertError } = await db.from('users').insert({ supabase_uid: uid, stamp_count: 0 });
+    if (insertError) throw insertError; // INSERT時のエラーは処理を中断
+    
+    // 4. 新規作成に成功した場合、スタンプ数は必ず0なので0を返す
+    return 0;
+
   } catch (err) {
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。ページをリロードしてください。');
+    // この関数内でエラーが発生した場合、アプリが停止しないように通知を出し、上位の処理にエラーを伝える
+    showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
 }
 
 async function updateStampCount(uid, newCount) {
-  const { data, error } = await db.from('users').update({ stamp_count: newCount, updated_at: new Date().toISOString() }).eq('supabase_uid', uid).select().single();
-  if (error) throw error;
-  return data.stamp_count;
+  try {
+    const { data, error } = await db.from('users').update({ stamp_count: newCount, updated_at: new Date().toISOString() }).eq('supabase_uid', uid).select().single();
+    if (error) throw error;
+    return data.stamp_count;
+  } catch(err) {
+    showNotification('エラー', 'スタンプの保存に失敗しました。');
+    throw err;
+  }
 }
 
 function updateStampDisplay(count) {
@@ -224,12 +236,15 @@ function updateRewardButtons(count) {
 
 function showNotification(title, msg) {
   const modal = document.getElementById('notification-modal');
-  document.getElementById('notification-title').textContent = title;
-  document.getElementById('notification-message').textContent = msg;
+  const titleEl = document.getElementById('notification-title');
+  const msgEl = document.getElementById('notification-message');
+  if(titleEl) titleEl.textContent = title;
+  if(msgEl) msgEl.textContent = msg;
   modal?.classList.add('active');
 }
 
 async function addStamp() {
+  if (!globalUID) return;
   try {
     let count = await fetchOrCreateUserRow(globalUID);
     if (count >= 6) return showNotification('コンプリート！', 'スタンプが6個たまりました！');
@@ -244,6 +259,7 @@ async function addStamp() {
 }
 
 async function redeemReward(type) {
+  if (!globalUID) return;
   try {
     let count = await fetchOrCreateUserRow(globalUID);
     const required = type === 'coffee' ? 3 : 6;
