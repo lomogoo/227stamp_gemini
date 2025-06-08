@@ -407,3 +407,9 @@ input[type="email"] {
 #load-more-btn.visible {
   display: inline-flex; /* 表示する際のスタイル */
 }
+
+.logo-icon {
+  height: 28px; /* 画像の高さを指定 */
+  width: auto;  /* 横幅は自動調整 */
+  vertical-align: middle; /* 隣のテキストとの縦位置を微調整 */
+}
