@@ -10,26 +10,16 @@ let globalUID = null;
 let html5QrCode = null;
 let articlesCache = [];
 
+// 「さらに読み込む」機能用の変数
 const ARTICLES_PER_PAGE = 10;
 let currentPage = 0;
 let currentCategory = 'all';
 let isLoadingMore = false;
 
+
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
 };
-
-/* ★★★ 新しいヘルパー関数：タイムアウト機能 ★★★ */
-function promiseWithTimeout(promise, ms, timeoutError = new Error('Promise timed out')) {
-  const timeout = new Promise((_, reject) => {
-    const id = setTimeout(() => {
-      clearTimeout(id);
-      reject(timeoutError);
-    }, ms);
-  });
-  return Promise.race([promise, timeout]);
-}
-
 
 /* 3) メイン処理 */
 document.addEventListener('DOMContentLoaded', () => {
@@ -55,42 +45,99 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
+  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       showSection(e.currentTarget.dataset.section);
     });
   });
   
+  // 「さらに読み込む」ボタンのイベントリスナー
   document.getElementById('load-more-btn')?.addEventListener('click', () => {
     if (isLoadingMore) return;
     currentPage++;
     renderArticles(currentCategory, false);
   });
 
-  const loginForm = document.getElementById('login-form');
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const emailInput = document.getElementById('email');
-      const msgEl = document.getElementById('login-message');
-      const submitButton = loginForm.querySelector('button[type="submit"]');
-      submitButton.disabled = true;
-      submitButton.textContent = '送信中...';
-      msgEl.textContent = '';
-      try {
-        const redirectURL = window.location.origin + window.location.pathname;
-        const { error } = await db.auth.signInWithOtp({ email: emailInput.value.trim(), options: { emailRedirectTo: redirectURL } });
-        msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
-        if (!error) emailInput.value = '';
-      } catch (err) {
-        msgEl.textContent = `❌ 予期せぬエラーが発生しました。`;
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Magic Link を送信';
-      }
-    });
-  }
+  // 2段階認証のロジック
+  const emailForm = document.getElementById('email-form');
+  const otpForm = document.getElementById('otp-form');
+  const emailInput = document.getElementById('email');
+  const otpCodeInput = document.getElementById('otp-code');
+  const emailMessage = document.getElementById('email-message');
+  const otpMessage = document.getElementById('otp-message');
+  const otpEmailDisplay = document.getElementById('otp-email-display');
+  const changeEmailBtn = document.getElementById('change-email-btn');
 
+  // ステップ1：メールアドレスを送信する処理
+  emailForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = emailInput.value.trim();
+    const submitButton = emailForm.querySelector('button[type="submit"]');
+    
+    submitButton.disabled = true;
+    submitButton.textContent = '送信中...';
+    emailMessage.textContent = '';
+
+    try {
+      const { error } = await db.auth.signInWithOtp({ 
+        email: email, 
+        options: { shouldCreateUser: true }
+      });
+
+      if (error) throw error;
+      
+      emailMessage.textContent = '✅ メールを確認してください！';
+      otpEmailDisplay.textContent = email;
+      emailForm.classList.add('hidden');
+      otpForm.classList.remove('hidden');
+
+    } catch (err) {
+      emailMessage.textContent = `❌ ${err.message || 'エラーが発生しました。'}`;
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = '認証コードを送信';
+    }
+  });
+
+  // ステップ2：受け取った認証コードを送信する処理
+  otpForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = otpEmailDisplay.textContent;
+    const token = otpCodeInput.value.trim();
+    const submitButton = otpForm.querySelector('button[type="submit"]');
+
+    submitButton.disabled = true;
+    submitButton.textContent = '認証中...';
+    otpMessage.textContent = '';
+    
+    try {
+      const { data, error } = await db.auth.verifyOtp({
+        email: email,
+        token: token,
+        type: 'email'
+      });
+      if (error) throw error;
+      
+      closeModal(document.getElementById('login-modal'));
+
+    } catch (err) {
+      otpMessage.textContent = `❌ ${err.message || '認証に失敗しました。'}`;
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = '認証する';
+    }
+  });
+  
+  // 「メールアドレスを修正」ボタンの処理
+  changeEmailBtn?.addEventListener('click', () => {
+    otpForm.classList.add('hidden');
+    emailForm.classList.remove('hidden');
+    emailMessage.textContent = '';
+    otpMessage.textContent = '';
+  });
+
+  // モーダルを閉じるグローバルな処理
   document.body.addEventListener('click', (e) => {
     if (e.target.matches('.close-modal') || e.target.matches('.close-notification')) {
       const modal = e.target.closest('.modal');
@@ -105,10 +152,12 @@ function setupStaticEventListeners() {
 async function showSection(sectionId, isInitialLoad = false) {
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
+
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.section === sectionId);
   });
+
   const sectionElement = document.getElementById(sectionId);
   if (sectionElement) {
     sectionElement.classList.add('active');
@@ -141,6 +190,7 @@ async function initializeFeedPage() {
       }
     });
   }
+  
   currentPage = 0;
   currentCategory = 'all';
   document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
@@ -148,7 +198,6 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
-  setupModalEventListeners();
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -172,8 +221,6 @@ function setupFoodtruckActionListeners() {
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
 }
 
-function setupModalEventListeners() {}
-
 function closeModal(modalElement) {
     if(!modalElement) return;
     modalElement.classList.remove('active');
@@ -188,9 +235,11 @@ async function fetchUserRow(uid) {
     const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
     if (error) throw error;
     if (data) return data.stamp_count;
-    const { error: insertError } = await db.from('users').insert({ supabase_uid: uid, stamp_count: 0 });
-    if (insertError) throw insertError;
-    return 0;
+    // DBトリガーがユーザーを作成するのを少し待つ
+    await new Promise(res => setTimeout(res, 500));
+    const { data: secondTry, error: secondError } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
+    if(secondError) throw secondError;
+    return secondTry.stamp_count;
   } catch (err) {
     showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
@@ -282,7 +331,6 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
-// ★★★ renderArticles関数をタイムアウト対応に修正 ★★★
 async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
@@ -318,10 +366,9 @@ async function renderArticles(category, clearContainer) {
     const cards = await Promise.all(newArticles.map(async a => {
       try {
         const urlToScrape = a.scraping_url || a.article_url;
-        // ★★★ 外部へのfetchに10秒のタイムアウトを設定 ★★★
         const res = await promiseWithTimeout(
             fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`),
-            10000 // 10秒
+            10000 
         );
         if (!res.ok) return { ...a, img: 'assets/placeholder.jpg' };
         const d = await res.json();
@@ -390,4 +437,14 @@ function showSummaryModal(articleId) {
     bulletsEl.innerHTML = article.summary_points?.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('') || '';
     readMoreBtn.href = article.article_url;
     modal.classList.add('active');
+}
+
+function promiseWithTimeout(promise, ms, timeoutError = new Error('Promise timed out')) {
+  const timeout = new Promise((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(timeoutError);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]);
 }
