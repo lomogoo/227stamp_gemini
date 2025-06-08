@@ -442,3 +442,15 @@ input[type="email"] {
   margin-top: 16px;
   text-align: center;
 }
+
+
+/* style.css の末尾にこのコードを追加 */
+
+/* 12. Schedule Image */
+.schedule-image {
+  display: block; /* 画像下の余分な余白を消す */
+  max-width: 100%; /* 親要素の幅以上に大きくならないようにする */
+  height: auto;   /* 画像の縦横比を維持する */
+  margin: 0 auto; /* 中央揃えにする */
+  border-radius: var(--radius-md); /* 画像の角を少し丸める */
+}
