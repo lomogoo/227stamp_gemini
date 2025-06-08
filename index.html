@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>⛰️Route227🚚</title>
+  <title>⛰️ Route227 Stamp</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  
   <link rel="stylesheet" href="style.css"/>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
   <div id="app-loader" class="app-loader active">
     <div class="loading-spinner"></div>
   </div>
@@ -16,31 +22,113 @@
   <div id="app-root">
     <header class="app-header">
       <div class="container header-container">
-        <h1 class="app-title">⛰️Route227🚚</h1>
+        <div class="logo">
+          <span class="logo-icon">⛰️</span>
+          <span class="logo-text">Route 227</span>
+        </div>
         <div id="user-status"></div>
       </div>
     </header>
 
-    <main id="content-container" class="app-content"></main>
+    <main class="app-content">
+      <section id="feed-section" class="section">
+        <div class="container">
+          <div class="category-tabs" id="category-tabs">
+            <button class="category-tab" data-category="all">すべて</button>
+            <button class="category-tab" data-category="イベント">イベント</button>
+            <button class="category-tab" data-category="お店">お店</button>
+            <button class="category-tab" data-category="ニュース">ニュース</button>
+          </div>
+          <div class="articles-container" id="articles-container"></div>
+        </div>
+      </section>
 
-    <nav class="footer-nav">
-      <div class="container">
-        <ul class="nav-tabs">
-          <li class="nav-item">
-            <a href="/227stamp/" class="nav-link active" data-path="feed">
-              <span>⛰️</span>
-              227
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="/227stamp/foodtruck" class="nav-link" data-path="foodtruck">
-              <span>🚚</span>
-              FoodTruck
-            </a>
-          </li>
-        </ul>
+      <section id="foodtruck-section" class="section">
+        <div class="container">
+          <div class="card stamp-card-container">
+            <div class="card-header">
+              <h2>スタンプカード</h2>
+              <p>旅の思い出を集めよう</p>
+            </div>
+            <div class="card-body">
+              <div class="stamp-grid">
+                <div class="stamp" data-stamp-id="1"><span class="stamp-number">1</span></div>
+                <div class="stamp" data-stamp-id="2"><span class="stamp-number">2</span></div>
+                <div class="stamp" data-stamp-id="3"><span class="stamp-number">3</span></div>
+                <div class="stamp" data-stamp-id="4"><span class="stamp-number">4</span></div>
+                <div class="stamp" data-stamp-id="5"><span class="stamp-number">5</span></div>
+                <div class="stamp" data-stamp-id="6"><span class="stamp-number">6</span></div>
+              </div>
+            </div>
+            <div class="card-footer">
+              <button class="btn btn-primary btn-full" id="scan-qr">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/></svg>
+                <span>QRコードをスキャン</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card rewards-card-container">
+            <div class="card-header">
+              <h2>特典と交換</h2>
+            </div>
+            <div class="card-body">
+              <div class="reward-item" id="coffee-reward-item">
+                <div class="reward-icon">☕️</div>
+                <div class="reward-info">
+                  <h3>コーヒー1杯</h3>
+                  <p>3スタンプで交換</p>
+                </div>
+                <button class="btn btn-secondary" id="coffee-reward" disabled>交換</button>
+              </div>
+              <div class="reward-item" id="curry-reward-item">
+                <div class="reward-icon">🍛</div>
+                <div class="reward-info">
+                  <h3>カレー1杯</h3>
+                  <p>6スタンプで交換</p>
+                </div>
+                <button class="btn btn-secondary" id="curry-reward" disabled>交換</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer-nav">
+      <button class="nav-link" data-section="feed-section">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm5 2H6v3h3zm6 0h-3v3h3zm-6 5H6v3h3zm6 0h-3v3h3z"/></svg>
+        <span>フィード</span>
+      </button>
+      <button class="nav-link" data-section="foodtruck-section">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6.343a4 4 0 0 1 0 5.314"/><path d="M18 3.2a8 8 0 0 1 0 11.6"/><path d="M4 12V8c0-1.1.9-2 2-2h2.2a2.8 2.8 0 0 1 2.3 1.2L12 9l2.5-2.8A2.8 2.8 0 0 1 16.8 5H20a2 2 0 0 1 2 2v4M4 12h16v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+        <span>スタンプ</span>
+      </button>
+    </footer>
+
+    <div class="modal" id="qr-modal">
+      <div class="modal-content">
+        <div class="modal-header"><h3>QRコードをスキャン</h3><button class="close-modal">&times;</button></div>
+        <div class="modal-body"><div id="qr-reader"></div></div>
       </div>
-    </nav>
+    </div>
+    <div class="modal" id="notification-modal">
+      <div class="modal-content">
+        <div class="modal-header"><h3 id="notification-title"></h3><button class="close-modal">&times;</button></div>
+        <div class="modal-body"><p id="notification-message"></p><button class="btn btn-primary close-notification">OK</button></div>
+      </div>
+    </div>
+    <div class="modal" id="login-modal">
+      <div class="modal-content">
+        <div class="modal-header"><h3>ログイン</h3><button class="close-modal">&times;</button></div>
+        <form id="login-form" class="modal-body">
+          <p>スタンプ機能の利用にはログインが必要です。</p>
+          <input type="email" id="email" placeholder="メールアドレス" required />
+          <button type="submit" class="btn btn-primary btn-full">マジックリンクを送信</button>
+          <p id="login-message"></p>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
