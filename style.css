@@ -394,3 +394,16 @@ input[type="email"] {
   justify-content: center;
   gap: 8px;
 }
+
+
+/* 11. Load More Button */
+.load-more-container {
+  padding: 20px 0;
+  text-align: center;
+}
+#load-more-btn {
+  display: none; /* 初期状態では非表示 */
+}
+#load-more-btn.visible {
+  display: inline-flex; /* 表示する際のスタイル */
+}
