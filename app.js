@@ -5,48 +5,87 @@ const db = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
 );
 
-/* 2) グローバル変数・定数 */
+/* 2) グローバル変数 */
 let globalUID = null;
 let html5QrCode = null;
-const BASE_PATH = '/227stamp'; // ★ GitHub Pagesのリポジトリ名
 
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
 };
 
-/* 3) ルーターとページ初期化 */
+/* 3) メイン処理 */
+document.addEventListener('DOMContentLoaded', () => {
+  setupStaticEventListeners();
 
-const pageInitializers = {
-  feed: initializeFeedPage,
-  foodtruck: initializeFoodtruckPage
-};
-
-// ページの読み込みと初期化を行うメイン関数
-async function loadPage(path) {
-  const contentContainer = document.getElementById('content-container');
-  if (!contentContainer) return;
-  contentContainer.innerHTML = '<div class="loading-spinner"></div>';
-
-  try {
-    // ★絶対パスでHTMLをフェッチ
-    const response = await fetch(`${BASE_PATH}/pages/${path}.html`);
-    if (!response.ok) throw new Error(`Page not found: ${response.statusText}`);
+  db.auth.onAuthStateChange(async (event, session) => {
+    const appLoader = document.getElementById('app-loader');
+    appLoader.classList.add('active');
     
-    contentContainer.innerHTML = await response.text();
+    globalUID = session?.user?.id || null;
+    updateUserStatus(session);
+
+    const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
+    await showSection(activeSectionId, true);
     
-    if (pageInitializers[path]) {
-      await pageInitializers[path]();
+    appLoader.classList.remove('active');
+  });
+});
+
+/* 4) ナビゲーションと表示切替 */
+function setupStaticEventListeners() {
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      const sectionId = e.currentTarget.dataset.section;
+      showSection(sectionId);
+    });
+  });
+
+  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailInput = document.getElementById('email');
+    const msgEl = document.getElementById('login-message');
+    msgEl.textContent = '送信中...';
+    const { error } = await db.auth.signInWithOtp({ email: emailInput.value.trim(), options: { emailRedirectTo: window.location.href }});
+    msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
+  });
+}
+
+async function showSection(sectionId, isInitialLoad = false) {
+  const appLoader = document.getElementById('app-loader');
+  if(!isInitialLoad) appLoader.classList.add('active');
+
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(l => {
+    l.classList.toggle('active', l.dataset.section === sectionId);
+  });
+
+  const sectionElement = document.getElementById(sectionId);
+  if (sectionElement) {
+    sectionElement.classList.add('active');
+    if (sectionId === 'feed-section') {
+      await initializeFeedPage();
+    } else if (sectionId === 'foodtruck-section') {
+      await initializeFoodtruckPage();
     }
-  } catch (error) {
-    console.error('Failed to load page:', error);
-    contentContainer.innerHTML = `<div class="status status--error">ページの読み込みに失敗しました。<br>${error.message}</div>`;
+  }
+  if(!isInitialLoad) appLoader.classList.remove('active');
+}
+
+function updateUserStatus(session) {
+  const userStatusDiv = document.getElementById('user-status');
+  if (userStatusDiv) {
+    if (session) {
+      userStatusDiv.innerHTML = '<button id="logout-button" class="btn">ログアウト</button>';
+      document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
+    } else {
+      userStatusDiv.innerHTML = '';
+    }
   }
 }
 
-// フィードページの初期化ロジック
+/* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
   await renderArticles('all');
-  // カテゴリタブのリスナーを設定
   document.querySelectorAll('.category-tab').forEach(tab => {
     tab.addEventListener('click', (e) => {
       document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
@@ -57,84 +96,19 @@ async function initializeFeedPage() {
   });
 }
 
-// フードトラックページの初期化ロジック
 async function initializeFoodtruckPage() {
-  setupModalEventListeners(); // 先にモーダルのリスナーを設定
+  setupModalEventListeners();
   if (!globalUID) {
-    document.getElementById('login-modal')?.classList.add('active');
+    document.getElementById('login-modal').classList.add('active');
     return;
   }
-  const stampCount = await fetchOrCreateUserRow(globalUID);
-  updateStampDisplay(stampCount);
-  updateRewardButtons(stampCount);
-  setupFoodtruckActionListeners();
-}
-
-/* 4) メイン処理 */
-
-// URLのパスから現在のページを判断する関数
-function getCurrentPath() {
-    let path = window.location.pathname.replace(BASE_PATH, '').replace('/', '');
-    return path || 'feed';
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const appLoader = document.getElementById('app-loader');
-
-  // 認証状態の変更を監視
-  db.auth.onAuthStateChange(async (event, session) => {
-    appLoader.classList.add('active');
-    globalUID = session?.user?.id || null;
-    updateUserStatus(session);
-    
-    await loadPage(getCurrentPath());
-    updateActiveNavLink();
-    
-    appLoader.classList.remove('active');
-  });
-
-  // ナビゲーションリンクのクリックイベントを設定
-  document.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', e => {
-      e.preventDefault();
-      const path = e.currentTarget.dataset.path;
-      const fullPath = (path === 'feed') ? `${BASE_PATH}/` : `${BASE_PATH}/${path}`;
-      window.history.pushState({ path }, '', fullPath);
-      loadPage(path);
-      updateActiveNavLink();
-    });
-  });
-  
-  // ブラウザの「戻る」「進む」ボタンに対応
-  window.addEventListener('popstate', () => {
-    loadPage(getCurrentPath());
-    updateActiveNavLink();
-  });
-});
-
-function updateActiveNavLink() {
-    const currentPath = getCurrentPath();
-    document.querySelectorAll('.nav-link').forEach(l => {
-        l.classList.toggle('active', l.dataset.path === currentPath);
-    });
-}
-
-
-/* 5) ページ別イベントリスナー設定 */
-function setupModalEventListeners() {
-  document.querySelectorAll('.modal').forEach(modal => {
-    modal.querySelector('.close-modal')?.addEventListener('click', () => closeModal(modal));
-    modal.querySelector('.close-notification')?.addEventListener('click', () => closeModal(modal));
-  });
-  
-  const loginForm = document.getElementById('login-form');
-  if(loginForm) {
-      loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('email').value;
-      const { error } = await db.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href }});
-      document.getElementById('login-message').textContent = error ? '❌ 送信失敗' : '✅ メールを確認！';
-    });
+  try {
+    const stampCount = await fetchOrCreateUserRow(globalUID);
+    updateStampDisplay(stampCount);
+    updateRewardButtons(stampCount);
+    setupFoodtruckActionListeners();
+  } catch(error) {
+    // fetchOrCreateUserRow内で通知される
   }
 }
 
@@ -144,19 +118,23 @@ function setupFoodtruckActionListeners() {
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
 }
 
-/* 6) ヘルパー関数群（安定版） */
+function setupModalEventListeners() {
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.querySelector('.close-modal')?.addEventListener('click', () => closeModal(modal));
+    modal.querySelector('.close-notification')?.addEventListener('click', () => closeModal(document.getElementById('notification-modal')));
+  });
+}
 
-function updateUserStatus(session) {
-    const userStatusDiv = document.getElementById('user-status');
-    if(!userStatusDiv) return;
-    if (session) {
-        userStatusDiv.innerHTML = '<button id="logout-button" class="btn btn--sm btn--outline">ログアウト</button>';
-        document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
-    } else {
-        userStatusDiv.innerHTML = '';
+function closeModal(modalElement) {
+    if(!modalElement) return;
+    modalElement.classList.remove('active');
+    if (modalElement.id === 'qr-modal' && html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(console.error);
     }
 }
 
+
+/* 6) ヘルパー関数群 */
 async function fetchOrCreateUserRow(uid) {
   try {
     const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
@@ -166,13 +144,13 @@ async function fetchOrCreateUserRow(uid) {
     if (iErr) throw iErr;
     return inserted.stamp_count;
   } catch (err) {
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
+    showNotification('エラー', 'ユーザー情報の取得に失敗しました。ページをリロードしてください。');
     throw err;
   }
 }
 
 async function updateStampCount(uid, newCount) {
-  const { data, error } = await db.from('users').update({ stamp_count: newCount }).eq('supabase_uid', uid).select().single();
+  const { data, error } = await db.from('users').update({ stamp_count: newCount, updated_at: new Date().toISOString() }).eq('supabase_uid', uid).select().single();
   if (error) throw error;
   return data.stamp_count;
 }
@@ -184,16 +162,19 @@ function updateStampDisplay(count) {
 function updateRewardButtons(count) {
   const coffeeBtn = document.getElementById('coffee-reward');
   const curryBtn = document.getElementById('curry-reward');
+  const coffeeItem = document.getElementById('coffee-reward-item');
+  const curryItem = document.getElementById('curry-reward-item');
+
   if (coffeeBtn) coffeeBtn.disabled = count < 3;
   if (curryBtn) curryBtn.disabled = count < 6;
+  coffeeItem?.classList.toggle('available', count >= 3);
+  curryItem?.classList.toggle('available', count >= 6);
 }
 
 function showNotification(title, msg) {
   const modal = document.getElementById('notification-modal');
-  const titleEl = document.getElementById('notification-title');
-  const msgEl = document.getElementById('notification-message');
-  if(titleEl) titleEl.textContent = title;
-  if(msgEl) msgEl.textContent = msg;
+  document.getElementById('notification-title').textContent = title;
+  document.getElementById('notification-message').textContent = msg;
   modal?.classList.add('active');
 }
 
@@ -234,7 +215,9 @@ function initQRScanner() {
     async (decodedText) => {
       if (isProcessing) return;
       isProcessing = true;
-      await html5QrCode.stop();
+      if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+      }
       closeModal(qrModal);
       if (decodedText === appData.qrString) {
         await addStamp();
@@ -242,21 +225,14 @@ function initQRScanner() {
         showNotification('無効なQR', 'お店のQRコードではありません。');
       }
     },
-    () => {}
-  ).catch(() => document.getElementById('qr-reader').innerHTML = '<p class="status status--error">カメラの起動に失敗</p>');
-}
-
-function closeModal(modalElement) {
-    if(!modalElement) return;
-    modalElement.classList.remove('active');
-    if (modalElement.id === 'qr-modal' && html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().catch(console.error);
-    }
+    (errorMessage) => { /* ignore */ }
+  ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
 async function renderArticles(category) {
   const articlesContainer = document.getElementById('articles-container');
   if (!articlesContainer) return;
+  articlesContainer.innerHTML = '<div class="loading-spinner"></div>';
   const list = [
     { url:'https://machico.mu/special/detail/2691',category:'イベント',title:'Machico 2691',summary:'イベント記事' },
     { url:'https://machico.mu/special/detail/2704',category:'イベント',title:'Machico 2704',summary:'イベント記事' },
@@ -279,8 +255,8 @@ async function renderArticles(category) {
     articlesContainer.innerHTML = '';
     cards.forEach(a => {
       const div = document.createElement('div');
-      div.className = 'card article-card';
-      div.innerHTML = `<a href="${a.url}" target="_blank" rel="noopener noreferrer"><img src="${a.img}" alt="${a.title}のサムネイル" loading="lazy"><div class="card__body"><span class="article-category">${a.category}</span><h3 class="article-title">${a.title}</h3><p class="article-excerpt">${a.summary}</p></div></a>`;
+      div.className = 'card';
+      div.innerHTML = `<a href="${a.url}" target="_blank" rel="noopener noreferrer"><img src="${a.img}" alt="${a.title}のサムネイル" loading="lazy"><div class="card-body"><h3 class="article-title">${a.title}</h3><p class="article-excerpt">${a.summary}</p></div></a>`;
       articlesContainer.appendChild(div);
     });
   } catch (error) {
