@@ -8,7 +8,14 @@ const db = createClient(
 /* 2) グローバル変数 */
 let globalUID = null;
 let html5QrCode = null;
-let articlesCache = []; // 取得した記事データを一時的に保存するキャッシュ
+let articlesCache = [];
+
+// 「さらに読み込む」機能用の変数
+const ARTICLES_PER_PAGE = 10; // 1回に読み込む記事の数
+let currentPage = 0;
+let currentCategory = 'all';
+let isLoadingMore = false;
+
 
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
@@ -42,6 +49,12 @@ function setupStaticEventListeners() {
     link.addEventListener('click', (e) => {
       showSection(e.currentTarget.dataset.section);
     });
+  });
+  
+  document.getElementById('load-more-btn')?.addEventListener('click', () => {
+    if (isLoadingMore) return;
+    currentPage++;
+    renderArticles(currentCategory, false);
   });
 
   const loginForm = document.getElementById('login-form');
@@ -106,19 +119,24 @@ function updateUserStatus(session) {
 
 /* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
-  await renderArticles('all');
   const categoryTabs = document.getElementById('category-tabs');
   if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
     categoryTabs.dataset.listenerAttached = 'true';
     categoryTabs.addEventListener('click', (e) => {
       if (e.target.classList.contains('category-tab')) {
+        currentPage = 0;
+        currentCategory = e.target.dataset.category;
         document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
         e.target.classList.add('active');
-        document.getElementById('articles-container').innerHTML = '<div class="loading-spinner"></div>';
-        renderArticles(e.target.dataset.category);
+        renderArticles(currentCategory, true);
       }
     });
   }
+  
+  currentPage = 0;
+  currentCategory = 'all';
+  document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
+  await renderArticles(currentCategory, true);
 }
 
 async function initializeFoodtruckPage() {
@@ -147,9 +165,7 @@ function setupFoodtruckActionListeners() {
 }
 
 function setupModalEventListeners() {
-  // この関数はグローバルな閉じるボタンのリスナーに集約されたため、
-  // 個別のモーダルに対する設定は不要になりました。
-  // 必要に応じてモーダル個別の設定を追加できます。
+  // グローバルな閉じるボタンのリスナーに集約されたため、この関数は空でOK
 }
 
 function closeModal(modalElement) {
@@ -159,6 +175,7 @@ function closeModal(modalElement) {
         html5QrCode.stop().catch(console.error);
     }
 }
+
 
 /* 6) ヘルパー関数群 */
 async function fetchUserRow(uid) {
@@ -260,24 +277,39 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
-async function renderArticles(category) {
+async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
-  if (!articlesContainer) return;
-  articlesContainer.innerHTML = '<div class="loading-spinner"></div>';
-  
+  const loadMoreBtn = document.getElementById('load-more-btn');
+  if (!articlesContainer || !loadMoreBtn) return;
+
+  isLoadingMore = true;
+  if (clearContainer) {
+    articlesContainer.innerHTML = '<div class="loading-spinner"></div>';
+  } else {
+    loadMoreBtn.textContent = '読み込み中...';
+    loadMoreBtn.disabled = true;
+  }
+
   try {
-    // Supabaseから記事データを取得
-    let query = db.from('articles').select('*').order('created_at', { ascending: false });
+    const from = currentPage * ARTICLES_PER_PAGE;
+    const to = from + ARTICLES_PER_PAGE - 1;
+
+    let query = db.from('articles').select('*').order('created_at', { ascending: false }).range(from, to);
     if (category !== 'all') {
       query = query.eq('category', category);
     }
-    const { data: fetchedArticles, error } = await query;
+    
+    const { data: newArticles, error } = await query;
     if (error) throw error;
 
-    articlesCache = fetchedArticles; // 取得したデータをキャッシュ
+    if (clearContainer) {
+        articlesContainer.innerHTML = '';
+        articlesCache = [];
+    }
+    
+    articlesCache.push(...newArticles);
 
-    // OGP画像の取得は並行して行う
-    const cards = await Promise.all(articlesCache.map(async a => {
+    const cards = await Promise.all(newArticles.map(async a => {
       try {
         const urlToScrape = a.scraping_url || a.article_url;
         const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`);
@@ -290,22 +322,33 @@ async function renderArticles(category) {
       }
     }));
 
-    articlesContainer.innerHTML = '';
-    cards.forEach(cardData => {
-      const div = document.createElement('div');
-      div.className = 'card';
-      div.innerHTML = `
-        <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
-          <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy">
-          <div class="card-body">
-            <h3 class="article-title">${cardData.title}</h3>
-            <p class="article-excerpt">${cardData.summary}</p>
-          </div>
-        </div>`;
-      articlesContainer.appendChild(div);
-    });
+    if (cards.length === 0 && clearContainer) {
+      articlesContainer.innerHTML = '<p style="text-align: center; padding: 20px;">記事はまだありません。</p>';
+    } else {
+      cards.forEach(cardData => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
+            <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy">
+            <div class="card-body">
+              <h3 class="article-title">${cardData.title}</h3>
+              <p class="article-excerpt">${cardData.summary}</p>
+            </div>
+          </div>`;
+        articlesContainer.appendChild(div);
+      });
+    }
+
+    if (newArticles.length < ARTICLES_PER_PAGE) {
+      loadMoreBtn.classList.remove('visible');
+    } else {
+      loadMoreBtn.classList.add('visible');
+    }
 
     document.querySelectorAll('.article-link').forEach(link => {
+      if(link.dataset.listenerAttached) return;
+      link.dataset.listenerAttached = 'true';
       link.addEventListener('click', (e) => {
         const articleId = e.currentTarget.dataset.articleId;
         showSummaryModal(parseInt(articleId, 10));
@@ -315,25 +358,25 @@ async function renderArticles(category) {
   } catch (error) {
     console.error("記事の読み込みエラー:", error);
     articlesContainer.innerHTML = '<div class="status status--error">記事の読み込みに失敗しました。</div>';
+  } finally {
+    isLoadingMore = false;
+    loadMoreBtn.textContent = 'さらに読み込む';
+    loadMoreBtn.disabled = false;
   }
 }
 
 function showSummaryModal(articleId) {
     const article = articlesCache.find(a => a.id === articleId);
     if (!article) return;
-
     const modal = document.getElementById('summary-modal');
     const imgEl = document.getElementById('summary-image');
     const titleEl = document.getElementById('summary-title');
     const bulletsEl = document.getElementById('summary-bullets');
     const readMoreBtn = document.getElementById('summary-read-more');
-
     const cardImage = document.querySelector(`[data-article-id="${articleId}"] img`);
     imgEl.style.backgroundImage = cardImage ? `url('${cardImage.src}')` : 'none';
-    
     titleEl.textContent = article.title;
     bulletsEl.innerHTML = article.summary_points?.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('') || '';
     readMoreBtn.href = article.article_url;
-
     modal.classList.add('active');
 }
