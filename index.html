@@ -34,7 +34,7 @@
       <section id="feed-section" class="section">
         <div class="container">
           <div class="category-tabs" id="category-tabs">
-            <button class="category-tab" data-category="all">すべて</button>
+            <button class="category-tab active" data-category="all">すべて</button>
             <button class="category-tab" data-category="イベント">イベント</button>
             <button class="category-tab" data-category="お店">お店</button>
             <button class="category-tab" data-category="ニュース">ニュース</button>
@@ -124,13 +124,26 @@
         <form id="login-form" class="modal-body">
           <p>スタンプ機能の利用にはログインが必要です。</p>
           <input type="email" id="email" placeholder="メールアドレス" required />
-          <button type="submit" class="btn btn-primary btn-full">マジックリンクを送信</button>
+          <button type="submit" class="btn btn-primary btn-full">Magic Link を送信</button>
           <p id="login-message"></p>
         </form>
       </div>
     </div>
+    <div class="modal" id="summary-modal">
+      <div class="modal-content summary-modal-content">
+        <button class="close-modal summary-close-btn">&times;</button>
+        <div id="summary-image" class="summary-image"></div>
+        <div class="summary-text-content">
+          <h3 id="summary-title"></h3>
+          <ul id="summary-bullets"></ul>
+          <a href="#" id="summary-read-more" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-full">
+            <span>記事を読む</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
-
   <script src="app.js"></script>
 </body>
 </html>
