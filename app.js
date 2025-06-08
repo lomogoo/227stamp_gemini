@@ -10,16 +10,26 @@ let globalUID = null;
 let html5QrCode = null;
 let articlesCache = [];
 
-// 「さらに読み込む」機能用の変数
 const ARTICLES_PER_PAGE = 10;
 let currentPage = 0;
 let currentCategory = 'all';
 let isLoadingMore = false;
 
-
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
 };
+
+/* ★★★ 新しいヘルパー関数：タイムアウト機能 ★★★ */
+function promiseWithTimeout(promise, ms, timeoutError = new Error('Promise timed out')) {
+  const timeout = new Promise((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(timeoutError);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]);
+}
+
 
 /* 3) メイン処理 */
 document.addEventListener('DOMContentLoaded', () => {
@@ -45,21 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
-  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       showSection(e.currentTarget.dataset.section);
     });
   });
   
-  // 「さらに読み込む」ボタンのイベントリスナー
   document.getElementById('load-more-btn')?.addEventListener('click', () => {
     if (isLoadingMore) return;
     currentPage++;
     renderArticles(currentCategory, false);
   });
 
-  // ログインフォームに対するイベントリスナー
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -84,17 +91,11 @@ function setupStaticEventListeners() {
     });
   }
 
-  // モーダルを閉じる処理をここに集約
   document.body.addEventListener('click', (e) => {
-    // 閉じるボタン（xボタンやOKボタン）がクリックされた場合
     if (e.target.matches('.close-modal') || e.target.matches('.close-notification')) {
       const modal = e.target.closest('.modal');
-      if (modal) {
-        closeModal(modal);
-      }
+      if (modal) closeModal(modal);
     }
-    
-    // モーダルの外側（グレーの背景部分）がクリックされた場合
     if (e.target.matches('.modal')) {
       closeModal(e.target);
     }
@@ -104,12 +105,10 @@ function setupStaticEventListeners() {
 async function showSection(sectionId, isInitialLoad = false) {
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
-
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.section === sectionId);
   });
-
   const sectionElement = document.getElementById(sectionId);
   if (sectionElement) {
     sectionElement.classList.add('active');
@@ -142,7 +141,6 @@ async function initializeFeedPage() {
       }
     });
   }
-  
   currentPage = 0;
   currentCategory = 'all';
   document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
@@ -150,6 +148,7 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
+  setupModalEventListeners();
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -173,6 +172,8 @@ function setupFoodtruckActionListeners() {
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
 }
 
+function setupModalEventListeners() {}
+
 function closeModal(modalElement) {
     if(!modalElement) return;
     modalElement.classList.remove('active');
@@ -180,7 +181,6 @@ function closeModal(modalElement) {
         html5QrCode.stop().catch(console.error);
     }
 }
-
 
 /* 6) ヘルパー関数群 */
 async function fetchUserRow(uid) {
@@ -282,6 +282,7 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
+// ★★★ renderArticles関数をタイムアウト対応に修正 ★★★
 async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
@@ -317,12 +318,17 @@ async function renderArticles(category, clearContainer) {
     const cards = await Promise.all(newArticles.map(async a => {
       try {
         const urlToScrape = a.scraping_url || a.article_url;
-        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`);
+        // ★★★ 外部へのfetchに10秒のタイムアウトを設定 ★★★
+        const res = await promiseWithTimeout(
+            fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`),
+            10000 // 10秒
+        );
         if (!res.ok) return { ...a, img: 'assets/placeholder.jpg' };
         const d = await res.json();
         const doc = new DOMParser().parseFromString(d.contents, 'text/html');
         return { ...a, img: doc.querySelector("meta[property='og:image']")?.content || 'assets/placeholder.jpg' };
-      } catch {
+      } catch (e) {
+        console.error(`画像取得タイムアウトまたはエラー: ${a.title}`, e);
         return { ...a, img: 'assets/placeholder.jpg' };
       }
     }));
