@@ -2,7 +2,7 @@
 const { createClient } = window.supabase;
 const db = createClient(
   'https://hccairtzksnnqdujalgv.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
+  'eyJhbGciOiJIzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
 );
 
 /* 2) グローバル変数 & データ */
@@ -94,12 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
+  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       showSection(e.currentTarget.dataset.section);
     });
   });
 
+  // ログインフォームに対するイベントリスナー
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -123,6 +125,17 @@ function setupStaticEventListeners() {
       }
     });
   }
+
+  // ★★★ 修正点：モーダルを閉じる処理をここに集約 ★★★
+  // body全体でクリックを監視し、閉じるボタンが押されたかを判断する（イベント委譲）
+  document.body.addEventListener('click', (e) => {
+    if (e.target.matches('.close-modal') || e.target.matches('.close-notification')) {
+      const modal = e.target.closest('.modal');
+      if (modal) {
+        closeModal(modal);
+      }
+    }
+  });
 }
 
 async function showSection(sectionId, isInitialLoad = false) {
@@ -169,7 +182,9 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
-  setupModalEventListeners();
+  // ★★★ 修正点：モーダル設定の呼び出しを削除 ★★★
+  // setupModalEventListeners(); // ← この行を削除
+
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -191,21 +206,6 @@ function setupFoodtruckActionListeners() {
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
-}
-
-function setupModalEventListeners() {
-  document.querySelectorAll('.modal').forEach(modal => {
-    const closeBtn = modal.querySelector('.close-modal');
-    if (closeBtn && !closeBtn.dataset.listenerAttached) {
-      closeBtn.dataset.listenerAttached = 'true';
-      closeBtn.addEventListener('click', () => closeModal(modal));
-    }
-    const closeNotifBtn = modal.querySelector('.close-notification');
-     if (closeNotifBtn && !closeNotifBtn.dataset.listenerAttached) {
-      closeNotifBtn.dataset.listenerAttached = 'true';
-      closeNotifBtn.addEventListener('click', () => closeModal(document.getElementById('notification-modal')));
-    }
-  });
 }
 
 function closeModal(modalElement) {
