@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const appLoader = document.getElementById('app-loader');
     appLoader.classList.add('active');
     
-    // ★★★ onAuthStateChange全体の処理をtry...catchで囲む ★★★
     try {
       globalUID = session?.user?.id || null;
       updateUserStatus(session);
@@ -39,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
+  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
       const sectionId = e.currentTarget.dataset.section;
@@ -46,22 +46,42 @@ function setupStaticEventListeners() {
     });
   });
 
+  // ログインフォームに対するイベントリスナー
   const loginForm = document.getElementById('login-form');
-  if(loginForm) {
+  if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
       const emailInput = document.getElementById('email');
       const msgEl = document.getElementById('login-message');
-      msgEl.textContent = '送信中...';
-      
-      // ★★★ リダイレクトURLをより安全なものに修正 ★★★
-      const redirectURL = window.location.origin + window.location.pathname;
-      const { error } = await db.auth.signInWithOtp({ 
-        email: emailInput.value.trim(), 
-        options: { emailRedirectTo: redirectURL }
-      });
+      const submitButton = loginForm.querySelector('button[type="submit"]');
 
-      msgEl.textContent = error ? `❌ ${error.message}` : '✅ メールを確認してください！';
+      // ボタンを無効化して、テキストを変更
+      submitButton.disabled = true;
+      submitButton.textContent = '送信中...';
+      msgEl.textContent = ''; // 前回のメッセージをクリア
+
+      try {
+        const redirectURL = window.location.origin + window.location.pathname;
+        const { error } = await db.auth.signInWithOtp({ 
+          email: emailInput.value.trim(), 
+          options: { emailRedirectTo: redirectURL }
+        });
+
+        if (error) {
+          msgEl.textContent = `❌ ${error.message}`;
+        } else {
+          msgEl.textContent = '✅ メールを確認してください！';
+          emailInput.value = ''; // 成功したら入力欄をクリア
+        }
+      } catch (err) {
+        msgEl.textContent = `❌ 予期せぬエラーが発生しました。`;
+        console.error("Sign in error:", err);
+      } finally {
+        // 処理が完了したら（成功・失敗問わず）、ボタンを元に戻す
+        submitButton.disabled = false;
+        submitButton.textContent = 'Magic Link を送信';
+      }
     });
   }
 }
@@ -102,9 +122,8 @@ function updateUserStatus(session) {
 /* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
   await renderArticles('all');
-  // イベントリスナーは一度だけ設定すれば良いように修正
   const categoryTabs = document.getElementById('category-tabs');
-  if (!categoryTabs.dataset.listenerAttached) {
+  if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
     categoryTabs.dataset.listenerAttached = 'true';
     categoryTabs.addEventListener('click', (e) => {
       if (e.target.classList.contains('category-tab')) {
@@ -121,7 +140,7 @@ async function initializeFoodtruckPage() {
   setupModalEventListeners();
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
-    updateStampDisplay(0); // ログアウト時は0を表示
+    updateStampDisplay(0);
     updateRewardButtons(0);
     return;
   }
@@ -131,7 +150,6 @@ async function initializeFoodtruckPage() {
     updateRewardButtons(stampCount);
     setupFoodtruckActionListeners();
   } catch(error) {
-    // fetchOrCreateUserRow内で通知される
     updateStampDisplay(0);
     updateRewardButtons(0);
   }
