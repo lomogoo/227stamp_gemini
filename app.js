@@ -28,21 +28,24 @@ const articles = [
           '**特典**: machicoユーザー限定で500円食券が当たるチャンスも！'
       ]
     },
-    { 
-      id: 1,
-      scraping_url:'https://machico.mu/special/detail/2704',
-      article_url: 'https://machico.mu/special/detail/2704',
-      category:'イベント',
-      title:'Sendai Coffee Fes 2025 Summer',
-      summary:'コーヒー好き必見！夏の週末を彩るコーヒーの祭典。お気に入りの一杯を見つけよう。',
-      summary_points: [
-          '**開催日時**: 2025年6月29日(土)・30日(日)',
-          '**場所**: 錦町公園',
-          '**内容**: 宮城県内外の人気コーヒーショップが集結！',
-          '**楽しみ方**: チケットで様々なコーヒーを飲み比べ。フードや雑貨も充実。'
-      ]
-    },
-    { 
+  { 
+
+    id: 1,
+    scraping_url: 'https://machico.mu/special/detail/2704',
+    article_url: 'https://machico.mu/special/detail/2704',
+    category: 'イベント',
+    title: '🌿バル仙台 2025｜杜の都で味わう東北ワインフェス',
+    summary: '東北ワインと欧州グルメが集う、勾当台公園の屋外フェス。コメント投稿やマチコインで500円券ゲットのチャンスあり！',
+    summary_points: [
+    '**開催日時**: 2025年6月20日(金)〜22日(日)、20日16:00〜21:00／21日11:00〜21:00／22日11:00〜19:00',
+    '**場所**: 勾当台公園 いこいの広場',
+    '**内容**: 東北ワイナリー＆輸入ワインの飲み比べ、東北食材×欧州料理が楽しめる',
+    '**入場料**: 無料（専用グラス購入で飲食可）',
+    '**特典**: コメント投稿・マチコイン交換・QRくじで500円食券ゲットのチャンスあり'
+    ]
+  },
+  
+  { 
       id: 2,
       scraping_url:'https://machico.mu/jump/ad/102236',
       article_url: 'https://www.sendai-jinjacho.jp/',
