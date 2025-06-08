@@ -139,9 +139,12 @@
           <button class="close-modal">&times;</button>
         </div>
         <div class="modal-body">
-          <form id="email-form">
+          <form id="email-form" class="modal-body">
             <p>スタンプ機能の利用にはログインが必要です。</p>
             <input type="email" id="email" placeholder="メールアドレス" required />
+            <p style="font-size: 12px; color: #6c757d; margin-top: -8px; margin-bottom: 16px;">
+              ※メールが届かない場合は、迷惑メールフォルダもご確認ください。
+            </p>
             <button type="submit" class="btn btn-primary btn-full">認証コードを送信</button>
             <p id="email-message" class="form-message"></p>
           </form>
