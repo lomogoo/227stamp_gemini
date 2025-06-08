@@ -2,20 +2,18 @@
 const { createClient } = window.supabase;
 const db = createClient(
   'https://hccairtzksnnqdujalgv.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
+  'eyJhbGciOiJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjY2FpcnR6a3NubnFkdWphbGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyNjI2MTYsImV4cCI6MjA2NDgzODYxNn0.TVDucIs5ClTWuykg_fy4yv65Rg-xbSIPFIfvIYawy_k'
 );
 
 /* 2) グローバル変数 */
 let globalUID = null;
 let html5QrCode = null;
 let articlesCache = [];
-
-// 「さらに読み込む」機能用の変数
 const ARTICLES_PER_PAGE = 10;
 let currentPage = 0;
 let currentCategory = 'all';
 let isLoadingMore = false;
-
+let isInitialAuthCheckDone = false; // 【変更点】初回初期化が完了したかを管理するフラグ
 
 const appData = {
   qrString: "ROUTE227_STAMP_2025"
@@ -25,42 +23,62 @@ const appData = {
 document.addEventListener('DOMContentLoaded', () => {
   setupStaticEventListeners();
 
+  // 【変更点】認証状態の変更を監視するロジックを全面的に刷新
   db.auth.onAuthStateChange(async (event, session) => {
-    const appLoader = document.getElementById('app-loader');
-    appLoader.classList.add('active');
-    
-    try {
-      globalUID = session?.user?.id || null;
-      updateUserStatus(session);
-      const activeSectionId = document.querySelector('.section.active')?.id || 'feed-section';
-      await showSection(activeSectionId, true);
-    } catch (error) {
-      console.error("onAuthStateChangeで致命的なエラーが発生しました:", error);
-      showNotification("重大なエラー", "アプリの初期化に失敗しました。");
-    } finally {
-      appLoader.classList.remove('active');
+    console.log('onAuthStateChange event:', event); // デバッグ用にイベントをログ出力
+
+    globalUID = session?.user?.id || null;
+    updateUserStatus(session);
+
+    // 初回読み込み時のセッションチェックで一度だけ実行する
+    if (event === 'INITIAL_SESSION' && !isInitialAuthCheckDone) {
+      isInitialAuthCheckDone = true;
+      const appLoader = document.getElementById('app-loader');
+      appLoader.classList.add('active');
+      
+      try {
+        // 最後に開いていたセクションを復元、なければフィードへ
+        const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
+        await showSection(lastSection, true);
+      } catch (error) {
+        console.error("初回読み込みエラー:", error);
+        await showSection('feed-section', true); // エラー時はフィードにフォールバック
+      } finally {
+        appLoader.classList.remove('active');
+      }
+    }
+
+    // ログアウトした時の処理
+    if (event === 'SIGNED_OUT') {
+      sessionStorage.removeItem('activeSection');
+      // ユーザー情報をクリアしてフィード画面を表示
+      await showSection('feed-section', true);
     }
   });
 });
 
 /* 4) ナビゲーションと表示切替 */
 function setupStaticEventListeners() {
-  // フッターナビゲーションのリンクに対するイベントリスナー
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', (e) => {
-      showSection(e.currentTarget.dataset.section);
+      const sectionId = e.currentTarget.dataset.section;
+      // 【変更点】クリックしたセクションを記憶
+      sessionStorage.setItem('activeSection', sectionId);
+      showSection(sectionId);
     });
   });
-  
-  // 「さらに読み込む」ボタンのイベントリスナー
+
+  // 「さらに読み込む」ボタンのイベントリスナー（変更なし）
   document.getElementById('load-more-btn')?.addEventListener('click', () => {
     if (isLoadingMore) return;
     currentPage++;
     renderArticles(currentCategory, false);
   });
 
-  // 2段階認証のロジック
+  // 2段階認証のロジック（変更なし）
   const emailForm = document.getElementById('email-form');
+  // ... (以降の認証フォーム関連のコードは変更なし)
+  // ...
   const otpForm = document.getElementById('otp-form');
   const emailInput = document.getElementById('email');
   const otpCodeInput = document.getElementById('otp-code');
@@ -69,67 +87,42 @@ function setupStaticEventListeners() {
   const otpEmailDisplay = document.getElementById('otp-email-display');
   const changeEmailBtn = document.getElementById('change-email-btn');
 
-  // ステップ1：メールアドレスを送信する処理
   emailForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = emailInput.value.trim();
     const submitButton = emailForm.querySelector('button[type="submit"]');
-    
-    submitButton.disabled = true;
-    submitButton.textContent = '送信中...';
-    emailMessage.textContent = '';
-
+    submitButton.disabled = true; submitButton.textContent = '送信中...'; emailMessage.textContent = '';
     try {
-      const { error } = await db.auth.signInWithOtp({ 
-        email: email, 
-        options: { shouldCreateUser: true }
-      });
-
+      const { error } = await db.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true }});
       if (error) throw error;
-      
       emailMessage.textContent = '✅ メールを確認してください！';
       otpEmailDisplay.textContent = email;
       emailForm.classList.add('hidden');
       otpForm.classList.remove('hidden');
-
     } catch (err) {
       emailMessage.textContent = `❌ ${err.message || 'エラーが発生しました。'}`;
     } finally {
-      submitButton.disabled = false;
-      submitButton.textContent = '認証コードを送信';
+      submitButton.disabled = false; submitButton.textContent = '認証コードを送信';
     }
   });
 
-  // ステップ2：受け取った認証コードを送信する処理
   otpForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = otpEmailDisplay.textContent;
     const token = otpCodeInput.value.trim();
     const submitButton = otpForm.querySelector('button[type="submit"]');
-
-    submitButton.disabled = true;
-    submitButton.textContent = '認証中...';
-    otpMessage.textContent = '';
-    
+    submitButton.disabled = true; submitButton.textContent = '認証中...'; otpMessage.textContent = '';
     try {
-      const { data, error } = await db.auth.verifyOtp({
-        email: email,
-        token: token,
-        type: 'email'
-      });
+      const { data, error } = await db.auth.verifyOtp({ email: email, token: token, type: 'email' });
       if (error) throw error;
-      
       closeModal(document.getElementById('login-modal'));
-
     } catch (err) {
       otpMessage.textContent = `❌ ${err.message || '認証に失敗しました。'}`;
     } finally {
-      submitButton.disabled = false;
-      submitButton.textContent = '認証する';
+      submitButton.disabled = false; submitButton.textContent = '認証する';
     }
   });
   
-  // 「メールアドレスを修正」ボタンの処理
   changeEmailBtn?.addEventListener('click', () => {
     otpForm.classList.add('hidden');
     emailForm.classList.remove('hidden');
@@ -137,7 +130,6 @@ function setupStaticEventListeners() {
     otpMessage.textContent = '';
   });
 
-  // モーダルを閉じるグローバルな処理
   document.body.addEventListener('click', (e) => {
     if (e.target.matches('.close-modal') || e.target.matches('.close-notification')) {
       const modal = e.target.closest('.modal');
@@ -149,7 +141,9 @@ function setupStaticEventListeners() {
   });
 }
 
+// 【変更点】showSection内のローディング表示ロジックを簡素化
 async function showSection(sectionId, isInitialLoad = false) {
+  // isInitialLoad=false の時だけ（つまりユーザーのクリック時だけ）ローダーを出す
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
 
@@ -161,21 +155,26 @@ async function showSection(sectionId, isInitialLoad = false) {
   const sectionElement = document.getElementById(sectionId);
   if (sectionElement) {
     sectionElement.classList.add('active');
+    // ページごとの初期化処理は変わらず実行
     if (sectionId === 'feed-section') await initializeFeedPage();
     else if (sectionId === 'foodtruck-section') await initializeFoodtruckPage();
   }
-  if (!isInitialLoad) appLoader.classList.remove('active');
-}
-
-function updateUserStatus(session) {
-  const userStatusDiv = document.getElementById('user-status');
-  if (userStatusDiv) {
-    userStatusDiv.innerHTML = session ? '<button id="logout-button" class="btn">ログアウト</button>' : '';
-    if (session) document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
+  
+  if (!isInitialLoad) {
+      // ユーザーのクリック時のローダーは、処理が終わったらすぐに消す
+      setTimeout(() => appLoader.classList.remove('active'), 100);
   }
 }
 
-/* 5) ページ別初期化ロジック */
+function updateUserStatus(session) {
+    const userStatusDiv = document.getElementById('user-status');
+    if (userStatusDiv) {
+        userStatusDiv.innerHTML = session ? '<button id="logout-button" class="btn">ログアウト</button>' : '';
+        if (session) document.getElementById('logout-button').addEventListener('click', () => db.auth.signOut());
+    }
+}
+
+/* 5) ページ別初期化ロジック (変更なし) */
 async function initializeFeedPage() {
   const categoryTabs = document.getElementById('category-tabs');
   if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
@@ -192,6 +191,7 @@ async function initializeFeedPage() {
   }
   
   currentPage = 0;
+  // カテゴリは最後に選択したものを維持する（ここでは'all'で初期化）
   currentCategory = 'all';
   document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
   await renderArticles(currentCategory, true);
@@ -215,6 +215,13 @@ async function initializeFoodtruckPage() {
   }
 }
 
+
+// これ以降の関数は変更ありません
+// ... setupFoodtruckActionListeners, closeModal, fetchUserRow, ...
+// ... updateStampCount, updateStampDisplay, updateRewardButtons, ...
+// ... showNotification, addStamp, redeemReward, initQRScanner, ...
+// ... renderArticles, showSummaryModal, promiseWithTimeout ...
+
 function setupFoodtruckActionListeners() {
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
@@ -229,13 +236,11 @@ function closeModal(modalElement) {
     }
 }
 
-/* 6) ヘルパー関数群 */
 async function fetchUserRow(uid) {
   try {
     const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
     if (error) throw error;
     if (data) return data.stamp_count;
-    // DBトリガーがユーザーを作成するのを少し待つ
     await new Promise(res => setTimeout(res, 500));
     const { data: secondTry, error: secondError } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
     if(secondError) throw secondError;
