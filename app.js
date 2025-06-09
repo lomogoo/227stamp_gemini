@@ -151,7 +151,7 @@ async function showSection(sectionId, isInitialLoad = false) {
   if (sectionElement) {
     sectionElement.classList.add('active');
     if (sectionId === 'feed-section') await initializeFeedPage();
-    else if (sectionId === 'foodtruck-section') await initializeFoodtruckPage();
+    else if (sectionId === 'foodtruck-section') initializeFoodtruckPage(); // ここはawaitしない
   }
   
   if (!isInitialLoad) {
@@ -186,12 +186,12 @@ async function initializeFeedPage() {
   currentPage = 0;
   currentCategory = 'all';
   document.querySelectorAll('.category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === 'all'));
-  await renderArticles(currentCategory, true);
+  
+  // renderArticlesを直接awaitせず、分離して呼び出す
+  renderArticles(currentCategory, true);
 }
 
-// ★★★ ここが抜本的な対策の核心部です ★★★
 function initializeFoodtruckPage() {
-  // ログインしていない場合はモーダルを表示
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -199,21 +199,16 @@ function initializeFoodtruckPage() {
     return;
   }
   
-  // まず、スタンプ0個の状態でUIを即座に表示する
   updateStampDisplay(0);
   updateRewardButtons(0);
   setupFoodtruckActionListeners();
 
-  // その後、バックグラウンドで本当のスタンプ数を取得しにいく
-  // この処理は async なので、たとえ fetchUserRow がハングしても、アプリ全体は停止しない
   (async () => {
     try {
       const stampCount = await fetchUserRow(globalUID);
-      // 取得に成功したら、UIを正しい数に更新する
       updateStampDisplay(stampCount);
       updateRewardButtons(stampCount);
     } catch (error) {
-      // エラーが発生しても、UIは0個のままなので、ユーザーは操作を続けられる
       console.error("Failed to fetch stamp count in background:", error);
     }
   })();
@@ -248,13 +243,8 @@ async function fetchUserRow(uid) {
       .eq('supabase_uid', uid)
       .maybeSingle(); 
 
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      return 0;
-    }
-    return data.stamp_count;
+    if (error) throw error;
+    return data?.stamp_count || 0;
   } catch (err) {
     showNotification('データベースエラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
@@ -348,7 +338,8 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
-async function renderArticles(category, clearContainer) {
+// ★★★ フィード表示も抜本対策を適用 ★★★
+function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
   if (!articlesContainer || !loadMoreBtn) return;
@@ -356,74 +347,77 @@ async function renderArticles(category, clearContainer) {
   isLoadingMore = true;
   if (clearContainer) {
     articlesContainer.innerHTML = '<div class="loading-spinner"></div>';
+    articlesCache = [];
   } else {
     loadMoreBtn.textContent = '読み込み中...';
     loadMoreBtn.disabled = true;
   }
 
-  try {
-    const from = currentPage * ARTICLES_PER_PAGE;
-    const to = from + ARTICLES_PER_PAGE - 1;
+  // データ取得をバックグラウンドで実行
+  (async () => {
+    try {
+      const from = currentPage * ARTICLES_PER_PAGE;
+      const to = from + ARTICLES_PER_PAGE - 1;
 
-    let query = db.from('articles').select('*').order('created_at', { ascending: false }).range(from, to);
-    if (category !== 'all') {
-      query = query.eq('category', category);
-    }
-    
-    const { data: newArticles, error } = await query;
-    if (error) throw error;
+      let query = db.from('articles').select('*').order('created_at', { ascending: false }).range(from, to);
+      if (category !== 'all') {
+        query = query.eq('category', category);
+      }
+      
+      const { data: newArticles, error } = await query;
+      if (error) throw error;
 
-    if (clearContainer) {
-        articlesContainer.innerHTML = '';
-        articlesCache = [];
-    }
-    
-    articlesCache.push(...newArticles);
+      if (clearContainer) {
+          articlesContainer.innerHTML = ''; // スピナーを消す
+      }
+      
+      articlesCache.push(...newArticles);
 
-    if (newArticles.length === 0 && clearContainer) {
-      articlesContainer.innerHTML = '<p style="text-align: center; padding: 20px;">記事はまだありません。</p>';
-    } else {
-      newArticles.forEach(cardData => {
-        const div = document.createElement('div');
-        div.className = 'card';
-        const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
-        const imageUrl = cardData.image_url || placeholderUrl;
-        
-        div.innerHTML = `
-          <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
-            <img src="${imageUrl}" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='${placeholderUrl}';">
-            <div class="card-body">
-              <h3 class="article-title">${cardData.title}</h3>
-              <p class="article-excerpt">${cardData.summary}</p>
-            </div>
-          </div>`;
-        articlesContainer.appendChild(div);
+      if (articlesCache.length === 0 && clearContainer) {
+        articlesContainer.innerHTML = '<p style="text-align: center; padding: 20px;">記事はまだありません。</p>';
+      } else {
+        newArticles.forEach(cardData => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
+          const imageUrl = cardData.image_url || placeholderUrl;
+          
+          div.innerHTML = `
+            <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
+              <img src="${imageUrl}" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='${placeholderUrl}';">
+              <div class="card-body">
+                <h3 class="article-title">${cardData.title}</h3>
+                <p class="article-excerpt">${cardData.summary}</p>
+              </div>
+            </div>`;
+          articlesContainer.appendChild(div);
+        });
+      }
+
+      if (newArticles.length < ARTICLES_PER_PAGE) {
+        loadMoreBtn.classList.remove('visible');
+      } else {
+        loadMoreBtn.classList.add('visible');
+      }
+
+      document.querySelectorAll('.article-link').forEach(link => {
+        if(link.dataset.listenerAttached) return;
+        link.dataset.listenerAttached = 'true';
+        link.addEventListener('click', (e) => {
+          const articleId = e.currentTarget.dataset.articleId;
+          showSummaryModal(parseInt(articleId, 10));
+        });
       });
+
+    } catch (error) {
+      console.error("記事の読み込みエラー:", error);
+      articlesContainer.innerHTML = '<div class="status status--error">記事の読み込みに失敗しました。</div>';
+    } finally {
+      isLoadingMore = false;
+      loadMoreBtn.textContent = 'さらに読み込む';
+      loadMoreBtn.disabled = false;
     }
-
-    if (newArticles.length < ARTICLES_PER_PAGE) {
-      loadMoreBtn.classList.remove('visible');
-    } else {
-      loadMoreBtn.classList.add('visible');
-    }
-
-    document.querySelectorAll('.article-link').forEach(link => {
-      if(link.dataset.listenerAttached) return;
-      link.dataset.listenerAttached = 'true';
-      link.addEventListener('click', (e) => {
-        const articleId = e.currentTarget.dataset.articleId;
-        showSummaryModal(parseInt(articleId, 10));
-      });
-    });
-
-  } catch (error) {
-    console.error("記事の読み込みエラー:", error);
-    articlesContainer.innerHTML = '<div class="status status--error">記事の読み込みに失敗しました。</div>';
-  } finally {
-    isLoadingMore = false;
-    loadMoreBtn.textContent = 'さらに読み込む';
-    loadMoreBtn.disabled = false;
-  }
+  })();
 }
 
 function showSummaryModal(articleId) {
