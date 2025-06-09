@@ -230,6 +230,11 @@ function closeModal(modalElement) {
 }
 
 async function fetchUserRow(uid) {
+  // ★【実験】データベースへの問い合わせを無効化し、常に0を返すようにする
+  console.log("実験モード: fetchUserRowは常に0を返します");
+  return 0;
+
+  /* --- 元のコード ---
   try {
     const { data, error } = await db
       .from('users')
@@ -249,6 +254,7 @@ async function fetchUserRow(uid) {
     showNotification('データベースエラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
+  */
 }
 
 async function updateStampCount(uid, newCount) {
@@ -352,6 +358,11 @@ async function renderArticles(category, clearContainer) {
   }
 
   try {
+    // ★【実験】データベースへの問い合わせを無効化し、常に空のリストを返すようにする
+    console.log("実験モード: renderArticlesは記事0件として動作します");
+    const newArticles = [];
+    const error = null;
+    /* --- 元のコード ---
     const from = currentPage * ARTICLES_PER_PAGE;
     const to = from + ARTICLES_PER_PAGE - 1;
 
@@ -362,6 +373,7 @@ async function renderArticles(category, clearContainer) {
     
     const { data: newArticles, error } = await query;
     if (error) throw error;
+    */
 
     if (clearContainer) {
         articlesContainer.innerHTML = '';
