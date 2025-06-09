@@ -351,6 +351,10 @@ async function renderArticles(category, clearContainer) {
   }
 
   try {
+    // ★【実験A】記事のDB問い合わせを停止し、常に空の結果を返す
+    const { data: newArticles, error } = { data: [], error: null };
+    
+    /* --- 元のコード ---
     const from = currentPage * ARTICLES_PER_PAGE;
     const to = from + ARTICLES_PER_PAGE - 1;
 
@@ -361,6 +365,7 @@ async function renderArticles(category, clearContainer) {
     
     const { data: newArticles, error } = await query;
     if (error) throw error;
+    */
 
     if (clearContainer) {
         articlesContainer.innerHTML = '';
@@ -376,7 +381,6 @@ async function renderArticles(category, clearContainer) {
         const div = document.createElement('div');
         div.className = 'card';
         const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
-        // image_url列にURLがあればそれを使い、なければ代替画像を使う
         const imageUrl = cardData.image_url || placeholderUrl;
         
         div.innerHTML = `
@@ -426,7 +430,6 @@ function showSummaryModal(articleId) {
     const readMoreBtn = document.getElementById('summary-read-more');
     
     const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
-    // キャッシュされた記事データからimage_urlを使い、なければ代替画像を使う
     const imageUrl = article.image_url || placeholderUrl;
     imgEl.style.backgroundImage = `url('${imageUrl}')`;
 
