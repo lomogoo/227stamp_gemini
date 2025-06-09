@@ -189,23 +189,34 @@ async function initializeFeedPage() {
   await renderArticles(currentCategory, true);
 }
 
-async function initializeFoodtruckPage() {
+// ★★★ ここが抜本的な対策の核心部です ★★★
+function initializeFoodtruckPage() {
+  // ログインしていない場合はモーダルを表示
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
     updateRewardButtons(0);
     return;
   }
-  try {
-    const stampCount = await fetchUserRow(globalUID);
-    updateStampDisplay(stampCount);
-    updateRewardButtons(stampCount);
-    setupFoodtruckActionListeners();
-  } catch(error) {
-    console.error("[PAGE] Foodtruck page initialization error:", error);
-    updateStampDisplay(0);
-    updateRewardButtons(0);
-  }
+  
+  // まず、スタンプ0個の状態でUIを即座に表示する
+  updateStampDisplay(0);
+  updateRewardButtons(0);
+  setupFoodtruckActionListeners();
+
+  // その後、バックグラウンドで本当のスタンプ数を取得しにいく
+  // この処理は async なので、たとえ fetchUserRow がハングしても、アプリ全体は停止しない
+  (async () => {
+    try {
+      const stampCount = await fetchUserRow(globalUID);
+      // 取得に成功したら、UIを正しい数に更新する
+      updateStampDisplay(stampCount);
+      updateRewardButtons(stampCount);
+    } catch (error) {
+      // エラーが発生しても、UIは0個のままなので、ユーザーは操作を続けられる
+      console.error("Failed to fetch stamp count in background:", error);
+    }
+  })();
 }
 
 /* 6) ヘルパー関数群 */
