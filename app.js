@@ -32,48 +32,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ページの初期読み込みに関する処理は、このブロックで一度だけ実行する
     if (!isInitialAuthCheckDone) {
-      isInitialAuthCheckDone = true; // チェックが始まったらすぐにフラグを立てる
-      
+      isInitialAuthCheckDone = true;
       const appLoader = document.getElementById('app-loader');
-      // ローダーがアクティブでなければアクティブにする
       if (!appLoader.classList.contains('active')) {
         appLoader.classList.add('active');
       }
       
       try {
-        // 前回開いていたセクション、またはデフォルトのフィードを表示
         const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
         await showSection(lastSection, true);
       } catch (error) {
         console.error("初回読み込みエラー:", error);
-        await showSection('feed-section', true); // エラー時はフィードにフォールバック
+        await showSection('feed-section', true);
       } finally {
-        // 読み込みが成功しても失敗しても、必ずローダーを非表示にする
         appLoader.classList.remove('active');
       }
     }
     // 初期読み込みが完了した後のイベントを処理する
     else {
-      // ユーザーがOTP認証などを経て「新たに」サインインした場合の処理
-      // (ページロード時の自動サインインではなく、操作によるサインイン)
+      // ★修正点2: ログイン成功時の処理をシンプル化
+      // ユーザーが操作によって新たにサインインした場合
       if (event === 'SIGNED_IN' && !previousUID && globalUID) {
-        const appLoader = document.getElementById('app-loader');
-        appLoader.classList.add('active');
-        try {
-            // 現在表示しているセクションをリフレッシュする
-            const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
-            await showSection(currentActiveSectionId, true);
-        } catch (error) {
-            console.error("サインイン後の画面更新エラー:", error);
-        } finally {
-            setTimeout(() => appLoader.classList.remove('active'), 100);
-        }
+        const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
+        // 通常の画面遷移としてshowSectionを呼び出す (isInitialLoad = false)
+        await showSection(currentActiveSectionId, false);
       }
 
       // ログアウト時はページをリロードして状態をリセット
       if (event === 'SIGNED_OUT') {
-          sessionStorage.removeItem('activeSection');
-          window.location.reload();
+        sessionStorage.removeItem('activeSection');
+        window.location.reload();
       }
     }
   });
@@ -223,13 +211,21 @@ async function initializeFoodtruckPage() {
     updateRewardButtons(stampCount);
     setupFoodtruckActionListeners();
   } catch(error) {
+    console.error("Foodtruck page initialization error:", error);
     updateStampDisplay(0);
     updateRewardButtons(0);
   }
 }
 
 /* 6) ヘルパー関数群 */
+// ★修正点1: イベントリスナーの重複登録を防止
 function setupFoodtruckActionListeners() {
+    const foodtruckSection = document.getElementById('foodtruck-section');
+    if (!foodtruckSection || foodtruckSection.dataset.listenersAttached === 'true') {
+        return; // 既にリスナーが登録されていれば何もしない
+    }
+    foodtruckSection.dataset.listenersAttached = 'true'; // 登録したことを記録
+
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
     document.getElementById('curry-reward')?.addEventListener('click', () => redeemReward('curry'));
@@ -247,13 +243,19 @@ async function fetchUserRow(uid) {
   try {
     const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
     if (error) throw error;
-    if (data) return data.stamp_count;
-    await new Promise(res => setTimeout(res, 500));
-    const { data: secondTry, error: secondError } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
-    if(secondError) throw secondError;
-    return secondTry.stamp_count;
+    // 初回ログイン直後など、DBにまだユーザーレコードがない場合、少し待ってから再試行する
+    if (!data) {
+        console.warn("User record not found on first try, retrying after 500ms...");
+        await new Promise(res => setTimeout(res, 500));
+        const { data: secondTry, error: secondError } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
+        if(secondError) throw secondError;
+        return secondTry.stamp_count;
+    }
+    return data.stamp_count;
   } catch (err) {
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。');
+    // ユーザー情報がないことはエラーではない場合もあるので、通知はより限定的にする
+    console.error('Failed to fetch user row:', err.message);
+    showNotification('エラー', 'ユーザー情報の取得に失敗しました。時間をおいて再度お試しください。');
     throw err;
   }
 }
