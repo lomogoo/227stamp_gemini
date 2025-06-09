@@ -230,6 +230,10 @@ function closeModal(modalElement) {
 }
 
 async function fetchUserRow(uid) {
+  // ★【実験B】スタンプ数のDB問い合わせを停止し、常に0を返す
+  return 0;
+
+  /* --- 元のコード ---
   try {
     const { data, error } = await db
       .from('users')
@@ -248,6 +252,7 @@ async function fetchUserRow(uid) {
     showNotification('データベースエラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
+  */
 }
 
 async function updateStampCount(uid, newCount) {
@@ -351,10 +356,6 @@ async function renderArticles(category, clearContainer) {
   }
 
   try {
-    // ★【実験A】記事のDB問い合わせを停止し、常に空の結果を返す
-    const { data: newArticles, error } = { data: [], error: null };
-    
-    /* --- 元のコード ---
     const from = currentPage * ARTICLES_PER_PAGE;
     const to = from + ARTICLES_PER_PAGE - 1;
 
@@ -365,7 +366,6 @@ async function renderArticles(category, clearContainer) {
     
     const { data: newArticles, error } = await query;
     if (error) throw error;
-    */
 
     if (clearContainer) {
         articlesContainer.innerHTML = '';
