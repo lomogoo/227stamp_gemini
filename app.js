@@ -24,8 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setupStaticEventListeners();
 
   db.auth.onAuthStateChange(async (event, session) => {
-    console.log(`[AUTH] Event: ${event}, Session: ${session ? 'Yes' : 'No'}`);
-
     const previousUID = globalUID;
     globalUID = session?.user?.id || null;
     updateUserStatus(session);
@@ -38,15 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       try {
-        console.log('[INIT] Starting initial section load...');
         const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
         await showSection(lastSection, true);
-        console.log('[INIT] Initial section load finished.');
       } catch (error) {
         console.error("[INIT] Critical error during initial load:", error);
         await showSection('feed-section', true);
       } finally {
-        console.log('[INIT] Hiding loader.');
         appLoader.classList.remove('active');
       }
     }
@@ -80,7 +75,6 @@ function setupStaticEventListeners() {
     renderArticles(currentCategory, false);
   });
 
-  // 2段階認証のロジック
   const emailForm = document.getElementById('email-form');
   const otpForm = document.getElementById('otp-form');
   const emailInput = document.getElementById('email');
@@ -145,7 +139,6 @@ function setupStaticEventListeners() {
 }
 
 async function showSection(sectionId, isInitialLoad = false) {
-  console.log(`[NAV] showSection called for: ${sectionId}, isInitial: ${isInitialLoad}`);
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
 
@@ -176,7 +169,6 @@ function updateUserStatus(session) {
 
 /* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
-  console.log('[PAGE] Initializing Feed Page');
   const categoryTabs = document.getElementById('category-tabs');
   if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
     categoryTabs.dataset.listenerAttached = 'true';
@@ -198,7 +190,6 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
-  console.log('[PAGE] Initializing Foodtruck Page');
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -238,33 +229,24 @@ function closeModal(modalElement) {
     }
 }
 
-// ★★★ ここが最重要修正点 ★★★
 async function fetchUserRow(uid) {
-  console.log(`[DB] Fetching user row for UID: ${uid}`);
   try {
     const { data, error } = await db
       .from('users')
       .select('stamp_count')
       .eq('supabase_uid', uid)
-      .maybeSingle(); // エラーを出さずに null を返す .maybeSingle() を使用
+      .maybeSingle(); 
 
     if (error) {
-      // データベースやネットワークの接続エラーはこちら
       console.error('[DB] Supabase fetch error:', error);
       throw error;
     }
-
     if (!data) {
-      // ユーザーレコードがまだ存在しない正常なケース
-      // ハングする可能性がある再試行をせず、0を返して正常に処理を続行させる
       console.warn('[DB] User row not found. Returning 0 stamps gracefully.');
       return 0;
     }
-    
-    console.log(`[DB] User found. Stamps: ${data.stamp_count}`);
     return data.stamp_count;
   } catch (err) {
-    // 予期せぬエラー
     showNotification('データベースエラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
@@ -299,9 +281,11 @@ function updateRewardButtons(count) {
 
 function showNotification(title, msg) {
   const modal = document.getElementById('notification-modal');
-  document.getElementById('notification-title').textContent = title;
-  document.getElementById('notification-message').textContent = msg;
-  modal?.classList.add('active');
+  if(modal){
+    document.getElementById('notification-title').textContent = title;
+    document.getElementById('notification-message').textContent = msg;
+    modal.classList.add('active');
+  }
 }
 
 async function addStamp() {
@@ -355,6 +339,7 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
+// ★★★ ここが最重要修正点 ★★★
 async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
@@ -387,22 +372,8 @@ async function renderArticles(category, clearContainer) {
     
     articlesCache.push(...newArticles);
 
-    const cards = await Promise.all(newArticles.map(async a => {
-      try {
-        const urlToScrape = a.scraping_url || a.article_url;
-        const res = await promiseWithTimeout(
-            fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`),
-            10000 
-        );
-        if (!res.ok) return { ...a, img: 'assets/placeholder.jpg' };
-        const d = await res.json();
-        const doc = new DOMParser().parseFromString(d.contents, 'text/html');
-        return { ...a, img: doc.querySelector("meta[property='og:image']")?.content || 'assets/placeholder.jpg' };
-      } catch (e) {
-        console.error(`画像取得タイムアウトまたはエラー: ${a.title}`, e);
-        return { ...a, img: 'assets/placeholder.jpg' };
-      }
-    }));
+    // ★ 修正: 不安定な画像取得処理を完全に削除し、代替画像を使用する
+    const cards = newArticles.map(a => ({ ...a, img: 'assets/placeholder.jpg' }));
 
     if (cards.length === 0 && clearContainer) {
       articlesContainer.innerHTML = '<p style="text-align: center; padding: 20px;">記事はまだありません。</p>';
@@ -412,7 +383,7 @@ async function renderArticles(category, clearContainer) {
         div.className = 'card';
         div.innerHTML = `
           <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
-            <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy">
+            <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='assets/placeholder.jpg';">
             <div class="card-body">
               <h3 class="article-title">${cardData.title}</h3>
               <p class="article-excerpt">${cardData.summary}</p>
@@ -455,8 +426,12 @@ function showSummaryModal(articleId) {
     const titleEl = document.getElementById('summary-title');
     const bulletsEl = document.getElementById('summary-bullets');
     const readMoreBtn = document.getElementById('summary-read-more');
+
+    // ★ 修正: こちらも代替画像を確実に表示するようにする
     const cardImage = document.querySelector(`[data-article-id="${articleId}"] img`);
-    imgEl.style.backgroundImage = cardImage ? `url('${cardImage.src}')` : 'none';
+    const imageUrl = cardImage ? cardImage.src : 'assets/placeholder.jpg';
+    imgEl.style.backgroundImage = `url('${imageUrl}')`;
+
     titleEl.textContent = article.title;
     bulletsEl.innerHTML = article.summary_points?.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('') || '';
     readMoreBtn.href = article.article_url;
