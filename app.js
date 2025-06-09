@@ -337,6 +337,58 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
+// ★★★ ここからが新しい画像取得処理です ★★★
+
+// URLからOGP画像を取得するヘルパー関数
+async function fetchImageForElement(element) {
+  const urlToScrape = element.dataset.scrapingUrl;
+
+  // 無効なURL（httpで始まらない、data: URIなど）はスキップ
+  if (!urlToScrape || !urlToScrape.startsWith('http')) {
+    element.dataset.processed = 'true';
+    return;
+  }
+
+  try {
+    const res = await promiseWithTimeout(
+        fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(urlToScrape)}`),
+        10000 
+    );
+    if (!res.ok) throw new Error('Response not OK');
+    
+    const d = await res.json();
+    const doc = new DOMParser().parseFromString(d.contents, 'text/html');
+    const imageUrl = doc.querySelector("meta[property='og:image']")?.content;
+
+    if (imageUrl) {
+      element.src = imageUrl; // 画像が見つかればsrcを差し替え
+    }
+  } catch (e) {
+    console.error(`画像取得エラー: ${urlToScrape}`, e.message);
+  } finally {
+    // 処理済みマークを付けて、再実行しないようにする
+    element.dataset.processed = 'true';
+  }
+}
+
+// 表示されている記事カードの画像をバックグラウンドで読み込む関数
+function loadRealImages() {
+    // まだ処理していない画像要素を取得
+    const imagesToLoad = document.querySelectorAll('img[data-scraping-url]:not([data-processed])');
+    imagesToLoad.forEach(img => {
+        // IntersectionObserverを使い、画面内に入った画像から読み込みを開始
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    fetchImageForElement(entry.target);
+                    observer.unobserve(entry.target); // 一度読み込んだら監視を解除
+                }
+            });
+        });
+        observer.observe(img);
+    });
+}
+
 async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
@@ -375,9 +427,11 @@ async function renderArticles(category, clearContainer) {
       newArticles.forEach(cardData => {
         const div = document.createElement('div');
         div.className = 'card';
+        const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
+        // まずは代替画像で表示し、data-scraping-urlに取得元URLを保持
         div.innerHTML = `
           <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
-            <img src="https://via.placeholder.com/400x250.png?text=Route227" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='https://via.placeholder.com/400x250.png?text=Image+Error';">
+            <img src="${placeholderUrl}" data-scraping-url="${cardData.scraping_url || cardData.article_url}" alt="${cardData.title}のサムネイル" loading="lazy">
             <div class="card-body">
               <h3 class="article-title">${cardData.title}</h3>
               <p class="article-excerpt">${cardData.summary}</p>
@@ -402,6 +456,9 @@ async function renderArticles(category, clearContainer) {
       });
     });
 
+    // ★★★ 記事カードの表示後に、画像のバックグラウンド取得を開始
+    loadRealImages();
+
   } catch (error) {
     console.error("記事の読み込みエラー:", error);
     articlesContainer.innerHTML = '<div class="status status--error">記事の読み込みに失敗しました。</div>';
@@ -422,7 +479,10 @@ function showSummaryModal(articleId) {
     const readMoreBtn = document.getElementById('summary-read-more');
     
     const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
-    imgEl.style.backgroundImage = `url('${placeholderUrl}')`;
+    // カード画像のsrcを取得し、もしなければ代替画像を使用
+    const cardImage = document.querySelector(`[data-article-id="${articleId}"] img`);
+    const imageUrl = cardImage ? cardImage.src : placeholderUrl;
+    imgEl.style.backgroundImage = `url('${imageUrl}')`;
 
     titleEl.textContent = article.title;
     bulletsEl.innerHTML = article.summary_points?.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('') || '';
