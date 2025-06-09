@@ -24,46 +24,57 @@ document.addEventListener('DOMContentLoaded', () => {
   setupStaticEventListeners();
 
   db.auth.onAuthStateChange(async (event, session) => {
-    console.log('onAuthStateChange event:', event);
+    console.log('onAuthStateChange event:', event, 'Session:', session ? 'Yes' : 'No');
 
+    const previousUID = globalUID;
     globalUID = session?.user?.id || null;
     updateUserStatus(session);
 
-    // 初回読み込み時のセッションチェックで一度だけ実行する
-    if (event === 'INITIAL_SESSION' && !isInitialAuthCheckDone) {
-      isInitialAuthCheckDone = true;
+    // ページの初期読み込みに関する処理は、このブロックで一度だけ実行する
+    if (!isInitialAuthCheckDone) {
+      isInitialAuthCheckDone = true; // チェックが始まったらすぐにフラグを立てる
+      
       const appLoader = document.getElementById('app-loader');
-      appLoader.classList.add('active');
+      // ローダーがアクティブでなければアクティブにする
+      if (!appLoader.classList.contains('active')) {
+        appLoader.classList.add('active');
+      }
       
       try {
+        // 前回開いていたセクション、またはデフォルトのフィードを表示
         const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
         await showSection(lastSection, true);
       } catch (error) {
         console.error("初回読み込みエラー:", error);
-        await showSection('feed-section', true);
+        await showSection('feed-section', true); // エラー時はフィードにフォールバック
       } finally {
+        // 読み込みが成功しても失敗しても、必ずローダーを非表示にする
         appLoader.classList.remove('active');
       }
     }
-
-    // ログイン成功時の処理
-    if (event === 'SIGNED_IN' && isInitialAuthCheckDone) {
-      const appLoader = document.getElementById('app-loader');
-      appLoader.classList.add('active');
-      try {
-          const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
-          await showSection(currentActiveSectionId, true);
-      } catch (error) {
-          console.error("サインイン後の画面更新エラー:", error);
-      } finally {
-          setTimeout(() => appLoader.classList.remove('active'), 100);
+    // 初期読み込みが完了した後のイベントを処理する
+    else {
+      // ユーザーがOTP認証などを経て「新たに」サインインした場合の処理
+      // (ページロード時の自動サインインではなく、操作によるサインイン)
+      if (event === 'SIGNED_IN' && !previousUID && globalUID) {
+        const appLoader = document.getElementById('app-loader');
+        appLoader.classList.add('active');
+        try {
+            // 現在表示しているセクションをリフレッシュする
+            const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
+            await showSection(currentActiveSectionId, true);
+        } catch (error) {
+            console.error("サインイン後の画面更新エラー:", error);
+        } finally {
+            setTimeout(() => appLoader.classList.remove('active'), 100);
+        }
       }
-    }
 
-    // ログアウト時はページをリロードして状態をリセットするのが最も確実
-    if (event === 'SIGNED_OUT') {
-        sessionStorage.removeItem('activeSection');
-        window.location.reload();
+      // ログアウト時はページをリロードして状態をリセット
+      if (event === 'SIGNED_OUT') {
+          sessionStorage.removeItem('activeSection');
+          window.location.reload();
+      }
     }
   });
 });
