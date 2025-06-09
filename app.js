@@ -24,13 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setupStaticEventListeners();
 
   db.auth.onAuthStateChange(async (event, session) => {
-    console.log('onAuthStateChange event:', event, 'Session:', session ? 'Yes' : 'No');
+    console.log(`[AUTH] Event: ${event}, Session: ${session ? 'Yes' : 'No'}`);
 
     const previousUID = globalUID;
     globalUID = session?.user?.id || null;
     updateUserStatus(session);
 
-    // ページの初期読み込みに関する処理は、このブロックで一度だけ実行する
     if (!isInitialAuthCheckDone) {
       isInitialAuthCheckDone = true;
       const appLoader = document.getElementById('app-loader');
@@ -39,26 +38,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       try {
+        console.log('[INIT] Starting initial section load...');
         const lastSection = sessionStorage.getItem('activeSection') || 'feed-section';
         await showSection(lastSection, true);
+        console.log('[INIT] Initial section load finished.');
       } catch (error) {
-        console.error("初回読み込みエラー:", error);
+        console.error("[INIT] Critical error during initial load:", error);
         await showSection('feed-section', true);
       } finally {
+        console.log('[INIT] Hiding loader.');
         appLoader.classList.remove('active');
       }
     }
-    // 初期読み込みが完了した後のイベントを処理する
     else {
-      // ★修正点2: ログイン成功時の処理をシンプル化
-      // ユーザーが操作によって新たにサインインした場合
       if (event === 'SIGNED_IN' && !previousUID && globalUID) {
         const currentActiveSectionId = document.querySelector('.section.active')?.id || 'foodtruck-section';
-        // 通常の画面遷移としてshowSectionを呼び出す (isInitialLoad = false)
         await showSection(currentActiveSectionId, false);
       }
 
-      // ログアウト時はページをリロードして状態をリセット
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem('activeSection');
         window.location.reload();
@@ -148,6 +145,7 @@ function setupStaticEventListeners() {
 }
 
 async function showSection(sectionId, isInitialLoad = false) {
+  console.log(`[NAV] showSection called for: ${sectionId}, isInitial: ${isInitialLoad}`);
   const appLoader = document.getElementById('app-loader');
   if (!isInitialLoad) appLoader.classList.add('active');
 
@@ -178,6 +176,7 @@ function updateUserStatus(session) {
 
 /* 5) ページ別初期化ロジック */
 async function initializeFeedPage() {
+  console.log('[PAGE] Initializing Feed Page');
   const categoryTabs = document.getElementById('category-tabs');
   if (categoryTabs && !categoryTabs.dataset.listenerAttached) {
     categoryTabs.dataset.listenerAttached = 'true';
@@ -199,6 +198,7 @@ async function initializeFeedPage() {
 }
 
 async function initializeFoodtruckPage() {
+  console.log('[PAGE] Initializing Foodtruck Page');
   if (!globalUID) {
     document.getElementById('login-modal').classList.add('active');
     updateStampDisplay(0);
@@ -211,20 +211,19 @@ async function initializeFoodtruckPage() {
     updateRewardButtons(stampCount);
     setupFoodtruckActionListeners();
   } catch(error) {
-    console.error("Foodtruck page initialization error:", error);
+    console.error("[PAGE] Foodtruck page initialization error:", error);
     updateStampDisplay(0);
     updateRewardButtons(0);
   }
 }
 
 /* 6) ヘルパー関数群 */
-// ★修正点1: イベントリスナーの重複登録を防止
 function setupFoodtruckActionListeners() {
     const foodtruckSection = document.getElementById('foodtruck-section');
     if (!foodtruckSection || foodtruckSection.dataset.listenersAttached === 'true') {
-        return; // 既にリスナーが登録されていれば何もしない
+        return;
     }
-    foodtruckSection.dataset.listenersAttached = 'true'; // 登録したことを記録
+    foodtruckSection.dataset.listenersAttached = 'true';
 
     document.getElementById('scan-qr')?.addEventListener('click', initQRScanner);
     document.getElementById('coffee-reward')?.addEventListener('click', () => redeemReward('coffee'));
@@ -239,23 +238,34 @@ function closeModal(modalElement) {
     }
 }
 
+// ★★★ ここが最重要修正点 ★★★
 async function fetchUserRow(uid) {
+  console.log(`[DB] Fetching user row for UID: ${uid}`);
   try {
-    const { data, error } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).maybeSingle();
-    if (error) throw error;
-    // 初回ログイン直後など、DBにまだユーザーレコードがない場合、少し待ってから再試行する
-    if (!data) {
-        console.warn("User record not found on first try, retrying after 500ms...");
-        await new Promise(res => setTimeout(res, 500));
-        const { data: secondTry, error: secondError } = await db.from('users').select('stamp_count').eq('supabase_uid', uid).single();
-        if(secondError) throw secondError;
-        return secondTry.stamp_count;
+    const { data, error } = await db
+      .from('users')
+      .select('stamp_count')
+      .eq('supabase_uid', uid)
+      .maybeSingle(); // エラーを出さずに null を返す .maybeSingle() を使用
+
+    if (error) {
+      // データベースやネットワークの接続エラーはこちら
+      console.error('[DB] Supabase fetch error:', error);
+      throw error;
     }
+
+    if (!data) {
+      // ユーザーレコードがまだ存在しない正常なケース
+      // ハングする可能性がある再試行をせず、0を返して正常に処理を続行させる
+      console.warn('[DB] User row not found. Returning 0 stamps gracefully.');
+      return 0;
+    }
+    
+    console.log(`[DB] User found. Stamps: ${data.stamp_count}`);
     return data.stamp_count;
   } catch (err) {
-    // ユーザー情報がないことはエラーではない場合もあるので、通知はより限定的にする
-    console.error('Failed to fetch user row:', err.message);
-    showNotification('エラー', 'ユーザー情報の取得に失敗しました。時間をおいて再度お試しください。');
+    // 予期せぬエラー
+    showNotification('データベースエラー', 'ユーザー情報の取得に失敗しました。');
     throw err;
   }
 }
