@@ -242,7 +242,6 @@ async function fetchUserRow(uid) {
       throw error;
     }
     if (!data) {
-      console.warn('[DB] User row not found. Returning 0 stamps gracefully.');
       return 0;
     }
     return data.stamp_count;
@@ -339,7 +338,6 @@ function initQRScanner() {
   ).catch(() => document.getElementById('qr-reader').innerHTML = '<p style="color: red;">カメラの起動に失敗しました</p>');
 }
 
-// ★★★ ここが最重要修正点 ★★★
 async function renderArticles(category, clearContainer) {
   const articlesContainer = document.getElementById('articles-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
@@ -372,18 +370,15 @@ async function renderArticles(category, clearContainer) {
     
     articlesCache.push(...newArticles);
 
-    // ★ 修正: 不安定な画像取得処理を完全に削除し、代替画像を使用する
-    const cards = newArticles.map(a => ({ ...a, img: 'assets/placeholder.jpg' }));
-
-    if (cards.length === 0 && clearContainer) {
+    if (newArticles.length === 0 && clearContainer) {
       articlesContainer.innerHTML = '<p style="text-align: center; padding: 20px;">記事はまだありません。</p>';
     } else {
-      cards.forEach(cardData => {
+      newArticles.forEach(cardData => {
         const div = document.createElement('div');
         div.className = 'card';
         div.innerHTML = `
           <div class="article-link" data-article-id="${cardData.id}" role="button" tabindex="0">
-            <img src="${cardData.img}" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='assets/placeholder.jpg';">
+            <img src="https://via.placeholder.com/400x250.png?text=Route227" alt="${cardData.title}のサムネイル" loading="lazy" onerror="this.onerror=null;this.src='https://via.placeholder.com/400x250.png?text=Image+Error';">
             <div class="card-body">
               <h3 class="article-title">${cardData.title}</h3>
               <p class="article-excerpt">${cardData.summary}</p>
@@ -426,11 +421,9 @@ function showSummaryModal(articleId) {
     const titleEl = document.getElementById('summary-title');
     const bulletsEl = document.getElementById('summary-bullets');
     const readMoreBtn = document.getElementById('summary-read-more');
-
-    // ★ 修正: こちらも代替画像を確実に表示するようにする
-    const cardImage = document.querySelector(`[data-article-id="${articleId}"] img`);
-    const imageUrl = cardImage ? cardImage.src : 'assets/placeholder.jpg';
-    imgEl.style.backgroundImage = `url('${imageUrl}')`;
+    
+    const placeholderUrl = 'https://via.placeholder.com/400x250.png?text=Route227';
+    imgEl.style.backgroundImage = `url('${placeholderUrl}')`;
 
     titleEl.textContent = article.title;
     bulletsEl.innerHTML = article.summary_points?.map(point => `<li>${point.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</li>`).join('') || '';
